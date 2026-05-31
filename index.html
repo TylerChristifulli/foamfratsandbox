@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOAMfrat Sandbox — Arcade</title>
+<meta name="description" content="The FOAMfrat Sandbox: interactive learning arcade for nurses and EMS professionals. Insert coin.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#06010f;
+    --bg-2:#0c0320;
+    --magenta:#ff2e88;
+    --cyan:#00eaff;
+    --amber:#ffd60a;
+    --green:#34e3a0;
+    --purple:#7a3cff;
+    --text:#eafcff;
+    --dim:#8a7fb0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"VT323","Courier New",monospace;
+    background:
+      radial-gradient(900px 600px at 50% -10%, rgba(122,60,255,.35), transparent 60%),
+      radial-gradient(700px 500px at 85% 20%, rgba(255,46,136,.18), transparent 60%),
+      radial-gradient(700px 500px at 12% 30%, rgba(0,234,255,.16), transparent 60%),
+      linear-gradient(180deg,var(--bg-2),var(--bg));
+    color:var(--text);
+    min-height:100%;
+    overflow-x:hidden;
+    position:relative;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ===== CRT scanlines + flicker + vignette ===== */
+  .crt{
+    pointer-events:none;
+    position:fixed;
+    inset:0;
+    z-index:50;
+  }
+  .crt::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.22) 3px,
+      rgba(0,0,0,.22) 3px
+    );
+    mix-blend-mode:multiply;
+  }
+  .crt::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:radial-gradient(120% 120% at 50% 50%, transparent 60%, rgba(0,0,0,.55) 100%);
+    animation:flicker 5s infinite;
+  }
+  @keyframes flicker{
+    0%,100%{opacity:1}
+    92%{opacity:1}
+    93%{opacity:.82}
+    94%{opacity:1}
+    96%{opacity:.9}
+    97%{opacity:1}
+  }
+
+  /* ===== neon grid floor ===== */
+  .floor{
+    position:fixed;
+    left:50%;
+    bottom:0;
+    width:200vw;
+    height:42vh;
+    transform:translateX(-50%) perspective(420px) rotateX(68deg);
+    transform-origin:bottom center;
+    background-image:
+      linear-gradient(rgba(0,234,255,.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,46,136,.30) 1px, transparent 1px);
+    background-size:44px 44px;
+    background-position:center;
+    mask-image:linear-gradient(to top, #000 5%, transparent 85%);
+    -webkit-mask-image:linear-gradient(to top, #000 5%, transparent 85%);
+    animation:grid 1.4s linear infinite;
+    z-index:0;
+  }
+  @keyframes grid{
+    from{background-position-y:0}
+    to{background-position-y:44px}
+  }
+
+  .wrap{
+    position:relative;
+    z-index:10;
+    max-width:980px;
+    margin:0 auto;
+    padding:46px 22px 90px;
+    text-align:center;
+  }
+
+  /* ===== marquee title ===== */
+  .marquee-tag{
+    font-family:"Press Start 2P",monospace;
+    font-size:10px;
+    letter-spacing:.32em;
+    color:var(--cyan);
+    text-shadow:0 0 8px var(--cyan);
+    margin-bottom:18px;
+  }
+  h1{
+    font-family:"Press Start 2P",monospace;
+    line-height:1.35;
+    font-size:clamp(20px,5.2vw,44px);
+    color:#fff;
+    text-shadow:
+      0 0 6px #fff,
+      0 0 14px var(--magenta),
+      0 0 30px var(--magenta),
+      0 0 54px rgba(255,46,136,.6);
+    margin-bottom:6px;
+  }
+  h1 .alt{
+    color:#fff;
+    text-shadow:
+      0 0 6px #fff,
+      0 0 14px var(--cyan),
+      0 0 30px var(--cyan),
+      0 0 54px rgba(0,234,255,.6);
+  }
+  h1 .flick{animation:textflick 3.2s infinite}
+  @keyframes textflick{
+    0%,96%,100%{opacity:1}
+    97%{opacity:.35}
+    98%{opacity:1}
+    98.6%{opacity:.5}
+  }
+  .tagline{
+    font-size:24px;
+    color:var(--dim);
+    margin:14px 0 6px;
+    letter-spacing:.04em;
+  }
+  .tagline b{color:var(--amber);text-shadow:0 0 10px rgba(255,214,10,.5)}
+
+  .coin{
+    font-family:"Press Start 2P",monospace;
+    font-size:11px;
+    color:var(--amber);
+    letter-spacing:.18em;
+    margin:26px 0 38px;
+    animation:blink 1.05s steps(1) infinite;
+    text-shadow:0 0 12px rgba(255,214,10,.7);
+  }
+  @keyframes blink{50%{opacity:0}}
+
+  /* ===== cabinet ===== */
+  .cab-row{
+    display:flex;
+    justify-content:center;
+    gap:30px;
+    flex-wrap:wrap;
+  }
+  .cabinet{
+    width:330px;
+    max-width:92vw;
+    background:linear-gradient(180deg,#190a33,#0d0520);
+    border:2px solid rgba(255,46,136,.5);
+    border-radius:18px 18px 12px 12px;
+    padding:14px 14px 20px;
+    box-shadow:
+      0 0 0 2px rgba(0,0,0,.4),
+      0 0 26px rgba(255,46,136,.32),
+      inset 0 0 30px rgba(122,60,255,.18);
+    position:relative;
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .cabinet:hover{
+    transform:translateY(-6px);
+    box-shadow:
+      0 0 0 2px rgba(0,0,0,.4),
+      0 0 40px rgba(255,46,136,.55),
+      inset 0 0 30px rgba(122,60,255,.25);
+  }
+  .cab-marquee{
+    font-family:"Press Start 2P",monospace;
+    font-size:12px;
+    color:#fff;
+    text-shadow:0 0 10px var(--cyan),0 0 22px var(--cyan);
+    background:linear-gradient(180deg,#231147,#150a2e);
+    border:1px solid rgba(0,234,255,.45);
+    border-radius:8px;
+    padding:12px 8px;
+    margin-bottom:12px;
+    letter-spacing:.04em;
+  }
+  .screen{
+    background:#02060a;
+    border:2px solid rgba(0,234,255,.35);
+    border-radius:8px;
+    height:160px;
+    overflow:hidden;
+    position:relative;
+    box-shadow:inset 0 0 30px rgba(0,234,255,.22);
+  }
+  .screen svg{display:block;width:100%;height:100%}
+  .ecg-path{
+    fill:none;
+    stroke:var(--green);
+    stroke-width:2.4;
+    filter:drop-shadow(0 0 5px var(--green));
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    stroke-dasharray:1400;
+    stroke-dashoffset:1400;
+    animation:trace 3.4s linear infinite;
+  }
+  @keyframes trace{
+    0%{stroke-dashoffset:1400}
+    100%{stroke-dashoffset:0}
+  }
+  .scr-label{
+    position:absolute;
+    top:8px;left:10px;
+    font-size:18px;
+    color:var(--green);
+    text-shadow:0 0 8px var(--green);
+    opacity:.85;
+  }
+  .scr-bpm{
+    position:absolute;
+    bottom:6px;right:10px;
+    font-size:18px;
+    color:var(--cyan);
+    text-shadow:0 0 8px var(--cyan);
+  }
+
+  .cab-title{
+    font-size:25px;
+    color:#fff;
+    margin:14px 0 2px;
+    letter-spacing:.02em;
+  }
+  .cab-sub{
+    font-size:18px;
+    color:var(--dim);
+    margin-bottom:14px;
+  }
+  .badges{
+    display:flex;gap:6px;justify-content:center;flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  .badge{
+    font-family:"Press Start 2P",monospace;
+    font-size:7px;
+    letter-spacing:.1em;
+    padding:5px 7px;
+    border-radius:5px;
+    border:1px solid rgba(255,255,255,.18);
+    color:var(--dim);
+    background:rgba(255,255,255,.03);
+  }
+  .badge.on{color:var(--amber);border-color:rgba(255,214,10,.4)}
+
+  .play{
+    display:inline-block;
+    font-family:"Press Start 2P",monospace;
+    font-size:12px;
+    letter-spacing:.08em;
+    color:#0a0014;
+    background:linear-gradient(180deg,#ffe24a,var(--amber));
+    border:none;
+    border-radius:8px;
+    padding:14px 22px;
+    text-decoration:none;
+    cursor:pointer;
+    box-shadow:0 4px 0 #b8920a, 0 0 22px rgba(255,214,10,.5);
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .play:hover{filter:brightness(1.06)}
+  .play:active{transform:translateY(4px);box-shadow:0 0 0 #b8920a,0 0 22px rgba(255,214,10,.5)}
+
+  /* coming-soon cabinet (locked) — kept subtle/empty per single-game choice */
+
+  footer{
+    position:relative;
+    z-index:10;
+    text-align:center;
+    padding:30px 16px 40px;
+    color:var(--dim);
+    font-size:18px;
+  }
+  footer .more{
+    font-family:"Press Start 2P",monospace;
+    font-size:9px;
+    color:var(--purple);
+    text-shadow:0 0 10px rgba(122,60,255,.6);
+    letter-spacing:.16em;
+    animation:blink 2.2s steps(1) infinite;
+    display:block;
+    margin-bottom:14px;
+  }
+  footer a{color:var(--cyan);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  @media(max-width:560px){
+    .marquee-tag{font-size:8px}
+    .coin{font-size:9px}
+  }
+</style>
+</head>
+<body>
+  <div class="floor" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <div class="marquee-tag">◄ FOAMFRAT PRESENTS ►</div>
+    <h1><span class="alt">FOAMFRAT</span><br><span class="flick">SANDBOX</span></h1>
+    <p class="tagline">The learning arcade for <b>nurses &amp; EMS</b></p>
+    <p class="coin">▸ INSERT COIN TO PLAY ◂</p>
+
+    <div class="cab-row">
+      <!-- Rhythm Lab cabinet -->
+      <div class="cabinet">
+        <div class="cab-marquee">RHYTHM LAB</div>
+        <div class="screen">
+          <span class="scr-label">SA NODE</span>
+          <span class="scr-bpm">72 BPM</span>
+          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+            <path class="ecg-path" d="
+              M0,90 L70,90 L84,90
+              Q90,84 96,90
+              L120,90 L132,90 L138,70 L150,118 L160,40 L172,110 L182,90
+              L210,90
+              Q236,40 262,90
+              L300,90 L314,90
+              Q320,84 326,90
+              L352,90 L364,90 L370,70 L382,118 L392,40 L404,110 L414,90
+              L442,90
+              Q468,40 494,90
+              L540,90 L560,90 L600,90" />
+          </svg>
+        </div>
+        <h2 class="cab-title">Rhythm Lab</h2>
+        <p class="cab-sub">The SA Node Drives the Beat</p>
+        <div class="badges">
+          <span class="badge on">CAPCE</span>
+          <span class="badge on">ANCC</span>
+          <span class="badge">1 PLAYER</span>
+        </div>
+        <a class="play" href="https://rhythm.foamfratsandbox.com/">PLAY ►</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span class="more">★ MORE CARTRIDGES LOADING ★</span>
+    © 2026 <strong>FOAMfrat</strong> · CAPCE &amp; ANCC accredited continuing education ·
+    <a href="https://foamfrat.com">foamfrat.com</a>
+  </footer>
+
+  <div class="crt" aria-hidden="true"></div>
+</body>
+</html>
