@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIC Type Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111114; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 2rem; }
+  .container { max-width: 640px; width: 100%; background: #1a1a1e; border-radius: 16px; padding: 2rem; }
+  h1 { font-size: 20px; font-weight: 500; color: #fff; margin-bottom: 1.5rem; text-align: center; }
+  .slider-group { display: flex; gap: 24px; margin-bottom: 1.5rem; }
+  .slider-col { flex: 1; }
+  .slider-col label { font-size: 13px; color: #999; display: block; margin-bottom: 2px; }
+  .slider-desc { font-size: 11px; color: #666; margin-bottom: 8px; line-height: 1.4; }
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; background: #333; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; }
+  #coag::-webkit-slider-thumb { background: #D85A30; }
+  #fib::-webkit-slider-thumb { background: #993556; }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: none; }
+  #coag::-moz-range-thumb { background: #D85A30; }
+  #fib::-moz-range-thumb { background: #993556; }
+  .slider-val { font-size: 14px; font-weight: 500; min-width: 36px; text-align: right; color: #e0e0e0; }
+  .leukemia-row { margin-bottom: 1.5rem; padding: 10px 14px; border-radius: 8px; background: #222226; display: flex; align-items: center; gap: 10px; }
+  .leukemia-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #7F77DD; cursor: pointer; }
+  .leukemia-row label { font-size: 13px; color: #ccc; cursor: pointer; }
+  .leukemia-row span { font-size: 11px; color: #555; margin-left: auto; }
+  #type-label { text-align: center; margin-bottom: 1.5rem; padding: 12px 16px; border-radius: 10px; background: #2a2a2e; font-size: 18px; font-weight: 500; color: #e0e0e0; transition: background 0.2s ease; }
+  .bar-container { display: flex; margin-bottom: 1.5rem; border-radius: 8px; overflow: hidden; height: 36px; border: 1px solid #333; }
+  .bar-s { height: 100%; transition: width 0.15s ease; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #fff; overflow: hidden; white-space: nowrap; }
+  .labs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .lab-card { background: #222226; border-radius: 10px; padding: 1rem; border: 1px solid transparent; transition: border-color 0.2s ease; }
+  .lab-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+  .lab-value { font-size: 24px; font-weight: 500; color: #e0e0e0; }
+  .lab-unit { font-size: 12px; color: #666; }
+  .lab-mech { font-size: 11px; color: #555; margin-top: 4px; line-height: 1.4; }
+  .lab-flag { font-size: 12px; margin-top: 4px; }
+  .callout { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 6px; line-height: 1.4; display: none; }
+  .info-box { margin-top: 1.5rem; padding: 14px 16px; border-radius: 10px; border: 1px solid #333; background: #1e1e22; }
+  .info-box-label { font-size: 13px; color: #888; margin-bottom: 4px; }
+  .info-box-text { font-size: 14px; color: #ccc; line-height: 1.5; }
+  .tx-box { margin-top: 1rem; padding: 14px 16px; border-radius: 10px; border: 1px solid #333; background: #1e1e22; }
+  .presets { margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button { font-size: 13px; background: #2a2a2e; color: #ccc; border: 1px solid #444; border-radius: 8px; padding: 8px 14px; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
+  .presets button:hover { background: #333; border-color: #666; }
+</style>
+</head>
+<body>
+<a href="/" aria-label="Back to arcade" style="position:fixed;top:14px;left:14px;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:13px;font-weight:600;letter-spacing:.03em;text-decoration:none;color:#eafcff;background:rgba(18,8,38,.72);border:1px solid rgba(0,234,255,.45);border-radius:999px;padding:8px 14px 8px 12px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 0 14px rgba(0,234,255,.28)">◄ Arcade</a>
+<div class="container">
+  <h1>DIC type simulator</h1>
+  <div class="slider-group">
+    <div class="slider-col">
+      <label>Hypercoagulation intensity</label>
+      <div class="slider-desc">Thrombin generation &#8594; fibrinogen cleaved to fibrin &#8594; microvascular thrombi. Driven by tissue factor, cytokines, NETs.</div>
+      <div class="slider-row">
+        <input type="range" min="0" max="100" value="0" step="1" id="coag" />
+        <span class="slider-val" id="coag-val">0%</span>
+      </div>
+    </div>
+    <div class="slider-col">
+      <label>Hyperfibrinolysis intensity</label>
+      <div class="slider-desc">tPA converts plasminogen &#8594; plasmin &#8594; degrades fibrin and fibrinogen. Suppressed when PAI-1 is elevated.</div>
+      <div class="slider-row">
+        <input type="range" min="0" max="100" value="0" step="1" id="fib" />
+        <span class="slider-val" id="fib-val">0%</span>
+      </div>
+    </div>
+  </div>
+  <div class="leukemia-row">
+    <input type="checkbox" id="leukemia" />
+    <label for="leukemia">Underlying leukemia (bone marrow suppression)</label>
+    <span>Impairs platelet production independently of DIC</span>
+  </div>
+  <div id="type-label">Normal hemostasis</div>
+  <div class="bar-container">
+    <div class="bar-s" id="bar-coag" style="background:#D85A30;width:0%"></div>
+    <div class="bar-s" id="bar-gap" style="background:#2a2a2e;width:100%"></div>
+    <div class="bar-s" id="bar-fib" style="background:#993556;width:0%"></div>
+  </div>
+  <div class="labs-grid">
+    <div class="lab-card" id="plt-card">
+      <div class="lab-label">Platelet count</div>
+      <div class="lab-value" id="plt">250,000</div>
+      <div class="lab-unit">/&#181;L</div>
+      <div class="lab-mech" id="plt-mech">Consumed primarily by thrombin activation and clot formation</div>
+      <div class="callout" id="plt-callout"></div>
+      <div class="lab-flag" id="plt-flag"></div>
+    </div>
+    <div class="lab-card" id="fbg-card">
+      <div class="lab-label">Fibrinogen</div>
+      <div class="lab-value" id="fbg">350</div>
+      <div class="lab-unit">mg/dL</div>
+      <div class="callout" id="fbg-callout"></div>
+      <div class="lab-flag" id="fbg-flag"></div>
+    </div>
+    <div class="lab-card">
+      <div class="lab-label">PT (INR)</div>
+      <div class="lab-value" id="pt">1.0</div>
+      <div class="lab-unit">ratio</div>
+      <div class="lab-mech">Prolongs as clotting factors are consumed</div>
+      <div class="lab-flag" id="pt-flag"></div>
+    </div>
+    <div class="lab-card">
+      <div class="lab-label">D-dimer</div>
+      <div class="lab-value" id="fdp">200</div>
+      <div class="lab-unit">ng/mL FEU</div>
+      <div class="lab-mech">Rises with both fibrin formation and breakdown</div>
+      <div class="lab-flag" id="fdp-flag"></div>
+    </div>
+    <div class="lab-card">
+      <div class="lab-label">Antithrombin</div>
+      <div class="lab-value" id="at">100</div>
+      <div class="lab-unit">% activity</div>
+      <div class="lab-mech">Consumed inhibiting thrombin and factor Xa</div>
+      <div class="lab-flag" id="at-flag"></div>
+    </div>
+    <div class="lab-card">
+      <div class="lab-label">PAI-1</div>
+      <div class="lab-value" id="pai">8</div>
+      <div class="lab-unit">ng/mL</div>
+      <div class="lab-mech">Blocks tPA; elevated by cytokines and LPS in sepsis</div>
+      <div class="lab-flag" id="pai-flag"></div>
+    </div>
+  </div>
+  <div class="info-box">
+    <div class="info-box-label">Clinical picture</div>
+    <div class="info-box-text" id="clinical">Normal coagulation and fibrinolysis. No pathological activation.</div>
+  </div>
+  <div class="tx-box" id="tx-panel" style="display:none">
+    <div class="info-box-label" style="margin-bottom:8px">Recommended treatment</div>
+    <div id="tx-content" style="font-size:13px;color:#ccc;line-height:1.8"></div>
+  </div>
+  <div class="presets">
+    <button onclick="P(0,0,false)">Normal</button>
+    <button onclick="P(85,15,false)">Organ failure (sepsis)</button>
+    <button onclick="P(20,85,true)">Bleeding (APL)</button>
+    <button onclick="P(90,90,false)">Massive bleeding</button>
+    <button onclick="P(20,20,false)">Non-symptomatic</button>
+  </div>
+</div>
+<script>
+var cE=document.getElementById('coag'),fE=document.getElementById('fib'),lE=document.getElementById('leukemia');
+function L(a,b,t){return a+(b-a)*t}
+function F(v,lo,hi){if(v<lo)return'<span style="color:#F09595">&#9660; Low</span>';if(v>hi)return'<span style="color:#F09595">&#9650; High</span>';return'<span style="color:#5DCAA5">Normal</span>'}
+function N(n){return n.toLocaleString('en-US')}
+function pill(t){return'<span style="display:inline-block;padding:3px 10px;border-radius:5px;margin:2px 4px 2px 0;background:#0F6E56;color:#9FE1CB;font-size:12px">'+t+'</span>'}
+
+function gT(c,f){
+  if(c===0&&f===0)return{n:'Normal hemostasis',bg:'#2a2a2e',k:'normal'};
+  if(c>=55&&f>=55)return{n:'Massive bleeding type',bg:'#501313',k:'massive'};
+  if(c>=55&&f<55)return{n:'Organ failure type',bg:'#412402',k:'organ'};
+  if(f>=55&&c<55)return{n:'Bleeding type',bg:'#4B1528',k:'bleeding'};
+  if(c<=30&&f<=30)return{n:'Non-symptomatic type (pre-DIC)',bg:'#2a2a2e',k:'nonsymp'};
+  if(c>f)return{n:'Evolving \u2014 coagulation dominant',bg:'#312010',k:'evolving'};
+  if(f>c)return{n:'Evolving \u2014 fibrinolysis dominant',bg:'#3a1828',k:'evolving'};
+  return{n:'Mixed / transitional',bg:'#1e2a3a',k:'evolving'}
+}
+
+function gC(c,f,lk){
+  if(c===0&&f===0&&!lk)return'Normal coagulation and fibrinolysis. No pathological activation.';
+  if(c===0&&f===0&&lk)return'No DIC activity, but bone marrow suppression from leukemia is reducing platelet production independently.';
+  var b='';
+  if(c>=55&&f>=55)b='Catastrophic hemorrhage from consumption of all clotting factors. Both hypercoagulation and hyperfibrinolysis at maximum. Requires massive transfusion.';
+  else if(c>=55&&f<40)b='Microvascular thrombosis causing organ ischemia and failure. Fibrinolysis suppressed by elevated PAI-1. Classic sepsis-associated DIC.';
+  else if(f>=55&&c<40)b='Severe bleeding from uncontrolled plasmin activity. Fibrinogen consumed rapidly. Seen in APL, obstetric emergencies, aortic aneurysms.';
+  else if(c>=55)b='Predominantly thrombotic picture with early signs of fibrinolytic activity. Monitor closely for progression.';
+  else if(f>=55)b='Predominantly hemorrhagic with some coagulation activation. Fibrinogen trending down.';
+  else if(c<=30&&f<=30)b='Lab abnormalities only. No overt clinical symptoms. Consider as pre-DIC \u2014 early treatment may be beneficial.';
+  else b='Pathological activation developing. Not yet meeting full DIC criteria. Trending toward clinical significance.';
+  if(lk)b+=' Thrombocytopenia worsened by leukemic marrow infiltration suppressing megakaryocyte production.';
+  return b
+}
+
+function gTx(k,lk){
+  var p=document.getElementById('tx-panel');
+  if(k==='normal'){p.style.display='none';return''}
+  p.style.display='block';
+  var i='';
+  if(k==='organ'){
+    i=pill('Treat underlying cause (antibiotics, source control)')+pill('Natural protease inhibitors (AT concentrate, rhTM)')+pill('VTE prophylaxis (LMWH preferred)')
+  }else if(k==='bleeding'){
+    i=pill('Treat underlying cause')+pill('Platelet transfusion (target >50,000/\u00B5L if bleeding)')+pill('FFP (15 mL/kg for clotting factor replacement)')+pill('Cryoprecipitate (fibrinogen replacement if <100\u2013150 mg/dL)')+pill('Synthetic protease inhibitors')+pill('Antifibrinolytic therapy (tranexamic acid)');
+    if(lk)i+=pill('ATRA (all-trans retinoic acid) for APL')
+  }else if(k==='massive'){
+    i=pill('Massive transfusion protocol')+pill('Platelet transfusion (target >50,000/\u00B5L)')+pill('FFP (15 mL/kg, repeat as needed)')+pill('Cryoprecipitate (target fibrinogen >100\u2013150 mg/dL)')+pill('Synthetic protease inhibitors')+pill('Antifibrinolytic therapy (tranexamic acid)')
+  }else if(k==='nonsymp'){
+    i=pill('Treat underlying cause')+pill('Heparin (LMWH preferred) for DVT prophylaxis')+pill('Monitor labs serially')
+  }else{
+    i=pill('Treat underlying cause')+pill('Monitor closely \u2014 reassess as DIC type declares itself')
+  }
+  return i
+}
+
+function cPlt(cN,fN,lk){
+  var cd=L(250000,15000,cN),fd=L(250000,40000,fN),sy=cN*fN*250000*0.3;
+  var p=Math.min(cd,fd)-sy;
+  if(lk)p=p*0.45;
+  return Math.round(Math.max(5000,Math.min(250000,p)))
+}
+
+function gPM(cN,fN,lk){
+  var p=[];
+  if(cN>=0.5)p.push('Thrombin trapping platelets in microthrombi');
+  else if(cN>0)p.push('Some consumption from clot formation');
+  if(fN>=0.5)p.push('FDPs impairing platelet aggregation');
+  else if(fN>0)p.push('mild plasmin effects on platelet receptors');
+  if(lk)p.push('marrow infiltration suppressing production');
+  if(p.length===0)return'Consumed primarily by thrombin activation and clot formation';
+  var r=p[0].charAt(0).toUpperCase()+p[0].slice(1);
+  for(var i=1;i<p.length;i++)r+=' + '+p[i];
+  return r
+}
+
+function cFbg(cN,fN){
+  var bl=350,ab=0;
+  if(cN>0&&cN<=0.35)ab=(cN/0.35)*200*(1-fN*0.9);
+  else if(cN>0.35){var fo=Math.max(0,1-(cN-0.35)/0.35);ab=fo*200*(1-fN*0.9)}
+  var tc=Math.min(1,cN*cN*0.55+fN*0.75);
+  return Math.round(Math.max(30,Math.min(600,L(bl,30,tc)+ab)))
+}
+
+function uPC(lk){
+  var co=document.getElementById('plt-callout'),ca=document.getElementById('plt-card');
+  if(!lk){co.style.display='none';ca.style.borderColor='transparent';return}
+  co.style.display='block';
+  co.textContent='\u2193 Bone marrow suppressed by leukemia \u2014 impaired platelet production on top of DIC consumption';
+  co.style.background='#26215C';co.style.color='#CECBF6';ca.style.borderColor='#534AB7'
+}
+
+function uFC(cN,fN,fbg){
+  var co=document.getElementById('fbg-callout'),ca=document.getElementById('fbg-card');
+  if(cN===0&&fN===0){co.style.display='none';ca.style.borderColor='transparent';return}
+  co.style.display='block';
+  if(cN>0&&cN<=0.45&&fN<0.3&&fbg>350){co.textContent='\u2191 Liver increasing fibrinogen to compensate (acute phase response)';co.style.background='#0F6E56';co.style.color='#9FE1CB';ca.style.borderColor='#0F6E56'}
+  else if(cN>0.35&&fN<0.4&&fbg>200&&fbg<=350){co.textContent='\u2194 Liver still compensating, but consumption catching up';co.style.background='#854F0B';co.style.color='#FAC775';ca.style.borderColor='#854F0B'}
+  else if(fbg<=200){co.textContent='\u2193 Consumption overwhelms liver production';co.style.background='#791F1F';co.style.color='#F7C1C1';ca.style.borderColor='#791F1F'}
+  else if(fN>=0.5&&fbg<=250){co.textContent='\u2193 Plasmin degrading fibrinogen faster than liver can replace it';co.style.background='#791F1F';co.style.color='#F7C1C1';ca.style.borderColor='#791F1F'}
+  else if(fN>=0.3){co.textContent='\u2193 Fibrinolysis consuming fibrinogen directly';co.style.background='#854F0B';co.style.color='#FAC775';ca.style.borderColor='#854F0B'}
+  else{co.textContent='Mild activation \u2014 liver maintaining fibrinogen levels';co.style.background='#2a2a2e';co.style.color='#999';ca.style.borderColor='transparent'}
+}
+
+function U(){
+  var c=parseInt(cE.value),f=parseInt(fE.value),lk=lE.checked;
+  var cN=c/100,fN=f/100;
+  document.getElementById('coag-val').textContent=c+'%';
+  document.getElementById('fib-val').textContent=f+'%';
+  var plt=cPlt(cN,fN,lk),fbg=cFbg(cN,fN);
+  var tc=Math.min(1,(cN+fN)/1.5);
+  var pt=Math.max(1,L(1,4.5,Math.min(1,cN*0.5+fN*0.4+tc*0.3))).toFixed(1);
+  var fdp=Math.round(L(200,20000,Math.min(1,Math.max(cN,fN)+tc*0.3)));
+  var at=Math.round(L(100,20,cN*0.9+fN*0.1));
+  var pai=Math.round(L(8,85,cN*0.8+(1-fN)*0.15));
+  document.getElementById('plt').textContent=N(plt);
+  document.getElementById('fbg').textContent=N(fbg);
+  document.getElementById('pt').textContent=pt;
+  document.getElementById('fdp').textContent=N(fdp);
+  document.getElementById('at').textContent=at;
+  document.getElementById('pai').textContent=pai;
+  document.getElementById('plt-flag').innerHTML=F(plt,150000,400000);
+  document.getElementById('fbg-flag').innerHTML=F(fbg,200,400);
+  document.getElementById('pt-flag').innerHTML=F(parseFloat(pt),0,1.3);
+  document.getElementById('fdp-flag').innerHTML=F(fdp,0,500);
+  document.getElementById('at-flag').innerHTML=F(at,80,120);
+  document.getElementById('pai-flag').innerHTML=F(pai,0,25);
+  document.getElementById('plt-mech').textContent=gPM(cN,fN,lk);
+  uPC(lk);uFC(cN,fN,fbg);
+  var ty=gT(c,f);
+  document.getElementById('type-label').textContent=ty.n;
+  document.getElementById('type-label').style.background=ty.bg;
+  document.getElementById('clinical').textContent=gC(c,f,lk);
+  document.getElementById('tx-content').innerHTML=gTx(ty.k,lk);
+
+  if(c===0&&f===0){
+    document.getElementById('bar-coag').style.width='0%';document.getElementById('bar-coag').textContent='';
+    document.getElementById('bar-gap').style.width='100%';
+    document.getElementById('bar-fib').style.width='0%';document.getElementById('bar-fib').textContent='';
+  }else{
+    var total=c+f;
+    var cp,fp,gp;
+    if(total===0){cp=0;fp=0;gp=100}
+    else{
+      cp=(c/total)*100;
+      fp=(f/total)*100;
+      gp=0;
+      if(c>0&&f>0){
+        var minShare=10;
+        if(cp<minShare){cp=minShare;fp=100-minShare;gp=0}
+        else if(fp<minShare){fp=minShare;cp=100-minShare;gp=0}
+      }
+    }
+    document.getElementById('bar-coag').style.width=cp+'%';document.getElementById('bar-coag').textContent=c>20?'Coagulation':'';
+    document.getElementById('bar-gap').style.width=gp+'%';
+    document.getElementById('bar-fib').style.width=fp+'%';document.getElementById('bar-fib').textContent=f>20?'Fibrinolysis':'';
+  }
+}
+function P(c,f,lk){cE.value=c;fE.value=f;lE.checked=lk;U()}
+cE.addEventListener('input',U);fE.addEventListener('input',U);lE.addEventListener('change',U);U();
+</script>
+</body>
+</html>
