@@ -286,7 +286,22 @@
   .play:hover{filter:brightness(1.06)}
   .play:active{transform:translateY(4px);box-shadow:0 0 0 #b8920a,0 0 22px rgba(255,214,10,.5)}
 
-  /* coming-soon cabinet (locked) — kept subtle/empty per single-game choice */
+  /* venous return flow animation */
+  .vessel{fill:none;stroke:rgba(90,200,255,.16);stroke-width:14;stroke-linecap:round}
+  .flow{
+    fill:none;stroke:#5ac8ff;stroke-width:6;stroke-linecap:round;
+    stroke-dasharray:14 26;
+    filter:drop-shadow(0 0 5px #5ac8ff);
+    animation:flow 1.05s linear infinite;
+  }
+  @keyframes flow{to{stroke-dashoffset:-80}}
+  .heart-pulse{
+    fill:var(--magenta);
+    filter:drop-shadow(0 0 8px var(--magenta));
+    transform-box:fill-box;transform-origin:center;
+    animation:hb 1.05s ease-in-out infinite;
+  }
+  @keyframes hb{0%,100%{transform:scale(1)}45%{transform:scale(1.15)}}
 
   footer{
     position:relative;
@@ -354,6 +369,28 @@
           <span class="badge">1 PLAYER</span>
         </div>
         <a class="play" href="https://rhythm.foamfratsandbox.com/">PLAY ►</a>
+      </div>
+
+      <!-- Venous Return cabinet -->
+      <div class="cabinet">
+        <div class="cab-marquee" style="text-shadow:0 0 10px #5ac8ff,0 0 22px #5ac8ff;border-color:rgba(90,200,255,.5)">VENOUS RETURN</div>
+        <div class="screen">
+          <span class="scr-label" style="color:#5ac8ff;text-shadow:0 0 8px #5ac8ff">MSFP → RAP</span>
+          <span class="scr-bpm" style="color:var(--magenta);text-shadow:0 0 8px var(--magenta)">ΔP</span>
+          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+            <path class="vessel" d="M16,124 C170,124 190,70 330,70 L600,70" />
+            <path class="flow"   d="M16,124 C170,124 190,70 330,70 L600,70" />
+            <path class="heart-pulse" d="M548,58 c-9,-13 -30,-4 -30,11 c0,13 30,29 30,29 c0,0 30,-16 30,-29 c0,-15 -21,-24 -30,-11 z"/>
+          </svg>
+        </div>
+        <h2 class="cab-title">Venous Return</h2>
+        <p class="cab-sub">Pressure gradients &amp; preload</p>
+        <div class="badges">
+          <span class="badge on">CAPCE</span>
+          <span class="badge on">ANCC</span>
+          <span class="badge">1 PLAYER</span>
+        </div>
+        <a class="play" href="venous.html">PLAY ►</a>
       </div>
     </div>
   </main>
