@@ -310,11 +310,6 @@
   .clot{fill:#ff5a5f;filter:drop-shadow(0 0 4px #ff5a5f);transform-box:fill-box;transform-origin:center;animation:clotpulse 2.4s ease-in-out infinite}
   @keyframes clotpulse{0%,100%{opacity:.2;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
 
-  /* RBC thrombus flow */
-  .rbc-vessel{fill:none;stroke:rgba(255,90,95,.15);stroke-width:16;stroke-linecap:round}
-  .rbc-flow{fill:none;stroke:#ff5a5f;stroke-width:9;stroke-linecap:round;stroke-dasharray:4 30;filter:drop-shadow(0 0 5px #ff5a5f);animation:flow 1s linear infinite}
-  .clot-mass{fill:#6e1418;stroke:#ff5a5f;stroke-width:2;filter:drop-shadow(0 0 7px rgba(255,90,95,.55));transform-box:fill-box;transform-origin:center;animation:hb 1.6s ease-in-out infinite}
-
   footer{
     position:relative;
     z-index:10;
@@ -438,23 +433,6 @@
         <a class="play" href="dic.html">PLAY ►</a>
       </div>
 
-      <!-- RBC Thrombus cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee" style="text-shadow:0 0 10px #ff5a5f,0 0 22px #ff5a5f;border-color:rgba(255,90,95,.5)">RBC × THROMBUS</div>
-        <div class="screen">
-          <span class="scr-label" style="color:#ff7a7e;text-shadow:0 0 8px #ff5a5f">RBC FLOW</span>
-          <span class="scr-bpm" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f">CLOT</span>
-          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-            <path class="rbc-vessel" d="M12,80 L470,80"/>
-            <path class="rbc-flow"   d="M12,80 L470,80"/>
-            <circle class="clot-mass" cx="520" cy="80" r="34"/>
-          </svg>
-        </div>
-        <h2 class="cab-title">RBC × Thrombus</h2>
-        <p class="cab-sub">Cell–clot collision</p>
-        <div class="badges"><span class="badge">1 PLAYER</span></div>
-        <a class="play" href="thrombus.html">PLAY ►</a>
-      </div>
     </div>
   </main>
 
