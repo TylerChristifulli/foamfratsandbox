@@ -78,22 +78,37 @@
     left:50%;
     bottom:0;
     width:200vw;
-    height:42vh;
-    transform:translateX(-50%) perspective(420px) rotateX(68deg);
+    height:34vh;
+    transform:translateX(-50%) perspective(900px) rotateX(58deg);
     transform-origin:bottom center;
-    background-image:
-      linear-gradient(rgba(0,234,255,.35) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,46,136,.30) 1px, transparent 1px);
-    background-size:44px 44px;
-    background-position:center;
-    mask-image:linear-gradient(to top, #000 5%, transparent 85%);
-    -webkit-mask-image:linear-gradient(to top, #000 5%, transparent 85%);
-    animation:grid 1.4s linear infinite;
+    overflow:hidden;
+    -webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
+    mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
     z-index:0;
+    pointer-events:none;
   }
-  @keyframes grid{
-    from{background-position-y:0}
-    to{background-position-y:44px}
+  .floor::before{
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    top:-96px;
+    bottom:-96px;
+    background-image:
+      linear-gradient(rgba(0,234,255,.26) 2px, transparent 2px),
+      linear-gradient(90deg, rgba(255,46,136,.22) 2px, transparent 2px);
+    background-size:48px 48px;
+    will-change:transform;
+    transform:translateZ(0);
+    backface-visibility:hidden;
+    animation:gridscroll 1.8s linear infinite;
+  }
+  @keyframes gridscroll{
+    from{transform:translate3d(0,0,0)}
+    to{transform:translate3d(0,48px,0)}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .floor::before{animation:none}
   }
 
   .wrap{
