@@ -566,7 +566,7 @@ function runMonitor(){
       o.start();o.stop(beep.currentTime+dur);
     }catch(e){}
   }
-  // NIBP cuff sound: a chugging pump motor (tonal hum pulsed by an LFO), not wind
+  // NIBP cuff sound: a steady pump-motor hum during inflation (no pulsing)
   function cuffSound(){
     try{
       beep=beep||new (window.AudioContext||window.webkitAudioContext)();
@@ -577,12 +577,8 @@ function runMonitor(){
       g.gain.linearRampToValueAtTime(0.05,t+0.6);       // motor spins up
       g.gain.setValueAtTime(0.05,t+dur-1.2);
       g.gain.linearRampToValueAtTime(0.0001,t+dur);     // motor winds down
-      // LFO chops the gain -> mechanical "chug chug" of the pump
-      const lfo=ctx.createOscillator(); lfo.type="square"; lfo.frequency.value=6.5;
-      const lfoG=ctx.createGain(); lfoG.gain.value=0.04;
-      lfo.connect(lfoG); lfoG.connect(g.gain);
       osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
-      osc.start(t); lfo.start(t); osc.stop(t+dur); lfo.stop(t+dur);
+      osc.start(t); osc.stop(t+dur);
     }catch(e){}
   }
   let lastBeatPhase=1;
