@@ -108,6 +108,22 @@
   .botbox.temp .lab,.botbox.temp .val{color:var(--temp);}
   .botbox.off .lab,.botbox.off .val{color:#555;}
 
+  /* device control bar */
+  .devbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0a0a0a;
+    border-top:1px solid #222;padding:7px 12px;}
+  .dgrp{display:flex;align-items:center;gap:6px;}
+  .dgrp.pace{margin-left:auto;}
+  .dlab{font-size:11px;font-weight:700;color:var(--dim);letter-spacing:.5px;}
+  .dunit{font-size:11px;color:var(--dim);}
+  .dval{min-width:34px;text-align:center;font-weight:800;font-size:16px;color:#fff;font-variant-numeric:tabular-nums;}
+  .dstep{width:28px;height:28px;border-radius:7px;background:#1c1c1c;border:1px solid #333;color:#fff;font-size:16px;line-height:1;}
+  .dbtn{border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;border:1px solid #333;background:#1a1a1a;color:#ddd;}
+  .dbtn.on{background:var(--co2);border-color:var(--co2);color:#1a0014;}
+  .dbtn.shock{background:linear-gradient(180deg,#ff5a4d,#d61f12);border-color:#ff7a6e;color:#fff;
+    box-shadow:0 2px 0 #7d0e06,0 0 14px rgba(214,31,18,.5);}
+  .dbtn.shock:active{transform:translateY(2px);box-shadow:0 0 0 #7d0e06;}
+  .dbtn.pacebtn.on{background:#19e03a;border-color:#19e03a;color:#002a08;}
+
   /* ---------- Control ---------- */
   #control{display:none;height:100%;flex-direction:column;background:#0c0c0c;}
   .chead{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);}
@@ -220,6 +236,22 @@
     <div class="botbox p off"><div class="lab">P2<span class="u"> mmHg</span></div><div class="val">--</div></div>
     <div class="botbox p off"><div class="lab">P3<span class="u"> mmHg</span></div><div class="val">--</div></div>
     <div class="botbox temp" id="bTemp"><div class="lab">Temp<span class="u"> °C</span></div><div class="val">--</div></div>
+  </div>
+  <!-- device control bar (operate the defibrillator/pacer from the monitor) -->
+  <div class="devbar">
+    <div class="dgrp">
+      <span class="dlab">ENERGY</span>
+      <button class="dstep" id="enDown">−</button>
+      <span class="dval" id="enVal">200</span><span class="dunit">J</span>
+      <button class="dstep" id="enUp">+</button>
+    </div>
+    <button class="dbtn shock" id="mShock">⚡ SHOCK</button>
+    <button class="dbtn" id="mSync">SYNC: OFF</button>
+    <div class="dgrp pace">
+      <button class="dbtn pacebtn" id="mPacer">PACER: OFF</button>
+      <span class="dlab">Rate</span><button class="dstep" id="prDown">−</button><span class="dval" id="prVal">70</span><button class="dstep" id="prUp">+</button>
+      <span class="dlab">Output</span><button class="dstep" id="maDown">−</button><span class="dval" id="maVal">0</span><span class="dunit">mA</span><button class="dstep" id="maUp">+</button>
+    </div>
   </div>
 </div>
 
@@ -570,7 +602,7 @@ function runMonitor(){
   function cuffSound(){
     try{
       beep=beep||new (window.AudioContext||window.webkitAudioContext)();
-      const ctx=beep, t=ctx.currentTime, dur=9;       // pump runs during inflation
+      const ctx=beep, t=ctx.currentTime, dur=NIBP_DUR;   // pump runs the whole cycle
       const osc=ctx.createOscillator(); osc.type="sawtooth"; osc.frequency.value=88;
       const lp=ctx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=300; lp.Q.value=4;
       const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
@@ -695,11 +727,46 @@ function runMonitor(){
     if(crit){banner.style.display="block";
       banner.textContent= STATE.pea?"** PEA — CHECK PULSE **":("** "+(RHYTHMS[STATE.rhythm].label).toUpperCase()+" **");}
     else banner.style.display="none";
+    renderDev();
   }
   function setNum(id,v){document.querySelector("#"+id+" .val").textContent=v;}
   function alarm(id,on){document.getElementById(id).classList.toggle("alarm",!!on);}
   // monitor-side manual NIBP cycle button (tap on the iPad)
   document.getElementById("btnNibpMon").onclick=()=>cycleNibp();
+
+  // ---- device control bar: operate defib / pacer from the monitor ----
+  const ENERGIES=[50,100,150,200,300,360];
+  function devApply(){ broadcast(); updNums(); }   // push to peers + refresh this screen
+  function monShock(){
+    STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy;
+    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&STATE.rhythm==="afib");
+    if(STATE.autoConvert && conv){
+      STATE.rhythm="sinus"; STATE.hr=90; STATE.pea=false;
+      if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;}
+      if(STATE.spo2<88) STATE.spo2=94;
+    }
+    ecg.triggerShock(); flashShock(STATE.lastShockEnergy); lastShockSeq=STATE.shockSeq;
+    devApply();
+  }
+  function stepEnergy(d){ let i=ENERGIES.indexOf(STATE.shockEnergy); if(i<0)i=3;
+    STATE.shockEnergy=ENERGIES[Math.max(0,Math.min(ENERGIES.length-1,i+d))]; devApply(); }
+  document.getElementById("mShock").onclick=monShock;
+  document.getElementById("enUp").onclick=()=>stepEnergy(1);
+  document.getElementById("enDown").onclick=()=>stepEnergy(-1);
+  document.getElementById("mSync").onclick=()=>{STATE.sync=!STATE.sync;devApply();};
+  document.getElementById("mPacer").onclick=()=>{STATE.pacerOn=!STATE.pacerOn;devApply();};
+  document.getElementById("prUp").onclick=()=>{STATE.pacerRate=Math.min(120,STATE.pacerRate+5);devApply();};
+  document.getElementById("prDown").onclick=()=>{STATE.pacerRate=Math.max(30,STATE.pacerRate-5);devApply();};
+  document.getElementById("maUp").onclick=()=>{STATE.pacerMa=Math.min(140,STATE.pacerMa+10);devApply();};
+  document.getElementById("maDown").onclick=()=>{STATE.pacerMa=Math.max(0,STATE.pacerMa-10);devApply();};
+  function renderDev(){
+    document.getElementById("enVal").textContent=STATE.shockEnergy;
+    document.getElementById("prVal").textContent=STATE.pacerRate;
+    document.getElementById("maVal").textContent=STATE.pacerMa;
+    const sy=document.getElementById("mSync"); sy.textContent="SYNC: "+(STATE.sync?"ON":"OFF"); sy.classList.toggle("on",STATE.sync);
+    const pc=document.getElementById("mPacer"); pc.textContent="PACER: "+(STATE.pacerOn?"ON":"OFF"); pc.classList.toggle("on",STATE.pacerOn);
+  }
+
   onState.push(updNums); updNums();
 
   // top bar date + elapsed case timer
