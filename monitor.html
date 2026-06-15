@@ -89,6 +89,10 @@
   .num.alarm{animation:flash .6s steps(1) infinite;}
   @keyframes flash{50%{background:#3a0000;}}
   .num.alarm .val{color:var(--alarm)!important;}
+  .nibpbar{height:4px;background:#10243a;border-radius:3px;margin-top:6px;overflow:hidden;display:none;}
+  .nibpbar i{display:block;height:100%;width:0;background:var(--nibp);}
+  .nibpcycle{margin-top:8px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
+    border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;align-self:flex-start;}
   .alarmbanner{position:absolute;top:0;left:0;right:0;text-align:center;background:var(--alarm);
     color:#fff;font-weight:700;font-size:13px;padding:2px;display:none;z-index:6;}
 
@@ -202,7 +206,9 @@
     <div class="params">
       <div class="num hr" id="nHr"><div class="lab">HR<span class="u">bpm</span></div><div class="val">--</div></div>
       <div class="num nibp" id="nNibp"><div class="lab">NIBP<span class="u">mmHg</span></div>
-        <div class="val">--/--</div><div class="sub">(<span id="nMap">--</span>)</div></div>
+        <div class="val">--/--</div><div class="sub">(<span id="nMap">--</span>)</div>
+        <div class="nibpbar" id="nibpBar"><i></i></div>
+        <button class="nibpcycle" id="btnNibpMon">↻ Cycle BP</button></div>
       <div class="num etco2" id="nEtco2"><div class="lab">EtCO₂<span class="u">mmHg</span></div>
         <div class="val">--</div><div class="sub">BR <b id="nRr">--</b></div></div>
       <div class="num spo2" id="nSpo2"><div class="lab">SpO₂<span class="u">%</span></div><div class="val">--</div></div>
@@ -560,23 +566,23 @@ function runMonitor(){
       o.start();o.stop(beep.currentTime+dur);
     }catch(e){}
   }
-  // NIBP cuff inflation sound: rising filtered-noise hiss
+  // NIBP cuff sound: a chugging pump motor (tonal hum pulsed by an LFO), not wind
   function cuffSound(){
     try{
       beep=beep||new (window.AudioContext||window.webkitAudioContext)();
-      const ctx=beep, dur=2.6, t=ctx.currentTime;
-      const buf=ctx.createBuffer(1,Math.floor(ctx.sampleRate*dur),ctx.sampleRate);
-      const d=buf.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
-      const src=ctx.createBufferSource(); src.buffer=buf;
-      const bp=ctx.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=0.9;
-      bp.frequency.setValueAtTime(200,t); bp.frequency.linearRampToValueAtTime(560,t+2.0);
-      const g=ctx.createGain();
-      g.gain.setValueAtTime(0.0001,t);
-      g.gain.exponentialRampToValueAtTime(0.12,t+2.0);   // pressure builds
-      g.gain.exponentialRampToValueAtTime(0.0001,t+dur); // deflate
-      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
-      src.start(t); src.stop(t+dur);
+      const ctx=beep, t=ctx.currentTime, dur=9;       // pump runs during inflation
+      const osc=ctx.createOscillator(); osc.type="sawtooth"; osc.frequency.value=88;
+      const lp=ctx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=300; lp.Q.value=4;
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.linearRampToValueAtTime(0.05,t+0.6);       // motor spins up
+      g.gain.setValueAtTime(0.05,t+dur-1.2);
+      g.gain.linearRampToValueAtTime(0.0001,t+dur);     // motor winds down
+      // LFO chops the gain -> mechanical "chug chug" of the pump
+      const lfo=ctx.createOscillator(); lfo.type="square"; lfo.frequency.value=6.5;
+      const lfoG=ctx.createGain(); lfoG.gain.value=0.04;
+      lfo.connect(lfoG); lfoG.connect(g.gain);
+      osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
+      osc.start(t); lfo.start(t); osc.stop(t+dur); lfo.stop(t+dur);
     }catch(e){}
   }
   let lastBeatPhase=1;
@@ -614,10 +620,12 @@ function runMonitor(){
   let nibpShown=null, nibpCycling=false;
   let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0;
 
+  const NIBP_DUR=30;                 // seconds for a full measurement
+  let nibpAnim=null, nibpStart=0;
   function renderNibp(){
+    if(nibpCycling) return;          // the cuff animation owns the display while cycling
     const val=document.querySelector("#nNibp .val"), mp=document.getElementById("nMap");
     const box=document.getElementById("nNibp");
-    if(nibpCycling){ val.textContent="⟳"; mp.textContent="…"; box.classList.remove("alarm"); return; }
     if(!nibpShown){ val.textContent="--/--"; mp.textContent="--"; box.classList.remove("alarm"); return; }
     val.textContent=nibpShown.sys+"/"+nibpShown.dia;
     mp.textContent=Math.round((nibpShown.sys+2*nibpShown.dia)/3);
@@ -625,8 +633,24 @@ function runMonitor(){
   }
   function cycleNibp(){
     if(nibpCycling) return;
-    nibpCycling=true; renderNibp(); cuffSound();
-    setTimeout(()=>{ nibpShown={sys:STATE.sys,dia:STATE.dia}; nibpCycling=false; renderNibp(); }, 4500);
+    nibpCycling=true; nibpStart=performance.now(); cuffSound();
+    const bar=document.getElementById("nibpBar"); bar.style.display="block";
+    document.getElementById("nNibp").classList.remove("alarm");
+    if(nibpAnim) clearInterval(nibpAnim);
+    nibpAnim=setInterval(()=>{
+      const el=(performance.now()-nibpStart)/1000;
+      if(el>=NIBP_DUR){
+        clearInterval(nibpAnim); nibpAnim=null; nibpCycling=false;
+        nibpShown={sys:STATE.sys,dia:STATE.dia};
+        bar.style.display="none"; renderNibp(); return;
+      }
+      // progress bar + simulated cuff pressure (inflate ~10s, then bleed down)
+      bar.firstElementChild.style.width=Math.min(100,(el/NIBP_DUR)*100)+"%";
+      const target=Math.max(STATE.sys+30,140);
+      const cuff = el<10 ? target*(el/10) : target*Math.max(0,1-(el-10)/(NIBP_DUR-10));
+      document.querySelector("#nNibp .val").textContent=Math.round(cuff);
+      document.getElementById("nMap").textContent="measuring";
+    },150);
   }
   function flashShock(j){
     const el=document.getElementById("shockFlash");
@@ -678,6 +702,8 @@ function runMonitor(){
   }
   function setNum(id,v){document.querySelector("#"+id+" .val").textContent=v;}
   function alarm(id,on){document.getElementById(id).classList.toggle("alarm",!!on);}
+  // monitor-side manual NIBP cycle button (tap on the iPad)
+  document.getElementById("btnNibpMon").onclick=()=>cycleNibp();
   onState.push(updNums); updNums();
 
   // top bar date + elapsed case timer
