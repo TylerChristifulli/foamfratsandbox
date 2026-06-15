@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>FoamFrat Sim Monitor</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  :root{
+    /* ZOLL X Series-style channel colors */
+    --ecg:#19e03a; --art:#ff3b3b; --co2:#ff2db5; --spo2:#ffd60a;
+    --nibp:#2fb6f6; --temp:#e8e8e8; --pleth:#ffd60a; --bp:#ff3b3b;
+    --bg:#000; --panel:#0a0a0a; --line:#1c1c1c; --txt:#e8e8e8; --dim:#8a8a8a;
+    --alarm:#ff2b2b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden;}
+  button{font-family:inherit;cursor:pointer;}
+
+  /* ---------- Role chooser ---------- */
+  #chooser{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:24px;padding:24px;text-align:center;background:#060606;z-index:50;}
+  #chooser h1{font-size:26px;font-weight:700;margin:0;letter-spacing:.5px;}
+  #chooser h1 span{color:var(--ecg);}
+  #chooser p{color:var(--dim);max-width:520px;line-height:1.5;margin:0;}
+  .roomrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;}
+  .roomrow input{font-size:22px;letter-spacing:4px;text-align:center;width:160px;padding:10px;
+    background:#111;border:1px solid #333;border-radius:10px;color:#fff;text-transform:uppercase;}
+  .cards{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .card{background:#101010;border:1px solid #262626;border-radius:16px;padding:26px 30px;
+    width:230px;transition:.15s;}
+  .card:hover{border-color:var(--ecg);transform:translateY(-2px);}
+  .card .ic{font-size:40px;}
+  .card h2{margin:12px 0 6px;font-size:19px;}
+  .card small{color:var(--dim);display:block;line-height:1.4;margin-bottom:16px;}
+  .btn{background:var(--ecg);color:#000;border:none;border-radius:10px;padding:12px 18px;
+    font-size:15px;font-weight:700;width:100%;}
+  .btn.alt{background:#1d2b3a;color:#cfe8ff;}
+  .ghost{background:transparent;border:1px solid #333;color:#bbb;border-radius:8px;padding:8px 12px;font-size:13px;}
+
+  /* ---------- Monitor (X Series style) ---------- */
+  #monitor{display:none;height:100%;flex-direction:column;background:#000;}
+  .topbar{display:flex;align-items:center;height:30px;font-size:13px;color:#fff;
+    background:#0a0a0a;border-bottom:1px solid #222;}
+  .topbar .date{background:#15489c;color:#fff;padding:0 10px;height:100%;display:flex;
+    align-items:center;font-variant-numeric:tabular-nums;}
+  .topbar .pt{margin:0 auto;color:#fff;font-weight:600;}
+  .topbar .room{padding:0 10px;color:var(--ecg);font-weight:700;letter-spacing:1px;}
+  .topbar .batt{border:1px solid #3a7d3a;color:#5dd55d;border-radius:3px;padding:0 6px;
+    font-size:11px;margin-right:8px;}
+  .topbar .clock{padding:0 12px;font-variant-numeric:tabular-nums;color:#fff;}
+  .dot{width:8px;height:8px;border-radius:50%;background:#444;margin:0 8px;}
+  .dot.on{background:var(--ecg);box-shadow:0 0 6px var(--ecg);}
+
+  .grid{flex:1;display:grid;grid-template-columns:1fr 220px;grid-auto-rows:1fr;
+    min-height:0;background:#101010;gap:1px;}
+  .wave{position:relative;background:#000;overflow:hidden;}
+  .wave canvas{display:block;width:100%;height:100%;}
+  .wlabel{position:absolute;top:3px;left:8px;font-size:12px;font-weight:700;letter-spacing:.3px;z-index:2;}
+  .wlabel .sc{color:var(--dim);font-weight:500;margin-left:8px;}
+  .wave.ecg .wlabel{color:var(--ecg);}
+  .wave.art .wlabel{color:var(--art);}
+  .wave.co2 .wlabel{color:var(--co2);}
+  .wave.spo2 .wlabel{color:var(--spo2);}
+  .wave.off .wlabel{color:#666;}
+  .wscale{position:absolute;left:4px;font-size:9px;color:#5a5a5a;z-index:2;}
+
+  .num{background:#000;display:flex;flex-direction:column;justify-content:center;
+    padding:2px 10px;position:relative;}
+  .num .lab{font-size:12px;font-weight:700;letter-spacing:.5px;display:flex;
+    justify-content:space-between;align-items:baseline;}
+  .num .lab .u{color:var(--dim);font-weight:500;font-size:11px;}
+  .num .val{font-weight:800;line-height:.95;font-variant-numeric:tabular-nums;}
+  .num .sub{font-size:12px;color:var(--dim);}
+  .num.hr .lab,.num.hr .val{color:var(--ecg);} .num.hr .val{font-size:52px;}
+  .num.nibp .lab,.num.nibp .val{color:var(--nibp);} .num.nibp .val{font-size:30px;}
+  .num.etco2 .lab,.num.etco2 .val{color:var(--co2);} .num.etco2 .val{font-size:38px;}
+  .num.spo2 .lab,.num.spo2 .val{color:var(--spo2);} .num.spo2 .val{font-size:44px;}
+  .num.alarm{animation:flash .6s steps(1) infinite;}
+  @keyframes flash{50%{background:#3a0000;}}
+  .num.alarm .val{color:var(--alarm)!important;}
+  .alarmbanner{position:absolute;top:0;left:0;right:0;text-align:center;background:var(--alarm);
+    color:#fff;font-weight:700;font-size:13px;padding:2px;display:none;z-index:6;}
+
+  /* bottom parameter strip */
+  .botbar{display:flex;background:#000;border-top:1px solid #222;height:64px;}
+  .botbox{flex:1;display:flex;flex-direction:column;justify-content:center;padding:4px 12px;
+    border-right:1px solid #141414;}
+  .botbox .lab{font-size:11px;font-weight:700;letter-spacing:.5px;}
+  .botbox .lab .u{color:var(--dim);font-weight:500;}
+  .botbox .val{font-weight:800;font-size:26px;line-height:1;font-variant-numeric:tabular-nums;}
+  .botbox.art .lab,.botbox.art .val{color:var(--art);}
+  .botbox.p .lab,.botbox.p .val{color:var(--nibp);}
+  .botbox.temp .lab,.botbox.temp .val{color:var(--temp);}
+  .botbox.off .lab,.botbox.off .val{color:#555;}
+
+  /* ---------- Control ---------- */
+  #control{display:none;height:100%;flex-direction:column;background:#0c0c0c;}
+  .chead{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);}
+  .chead b{font-size:16px;} .chead .room{color:var(--ecg);font-weight:700;letter-spacing:2px;}
+  .cwrap{flex:1;overflow:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;align-content:start;}
+  .box{background:#121212;border:1px solid #242424;border-radius:14px;padding:16px;}
+  .box h3{margin:0 0 12px;font-size:14px;color:#cfcfcf;letter-spacing:.5px;text-transform:uppercase;}
+  .field{margin-bottom:14px;}
+  .field label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:6px;}
+  .field label b{color:#fff;font-variant-numeric:tabular-nums;}
+  input[type=range]{width:100%;accent-color:var(--ecg);height:26px;}
+  .rhythms{display:flex;flex-wrap:wrap;gap:6px;}
+  .rhythms button{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;
+    padding:7px 10px;font-size:12.5px;}
+  .rhythms button.active{background:var(--ecg);color:#000;border-color:var(--ecg);font-weight:700;}
+  .quick{display:flex;flex-wrap:wrap;gap:6px;}
+  .quick button{background:#2a1414;border:1px solid #4a2020;color:#ffd2d2;border-radius:8px;padding:7px 10px;font-size:12.5px;}
+  .scn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .scn button{border-radius:8px;padding:8px 12px;font-size:13px;border:1px solid #2e2e2e;background:#1a1a1a;color:#ddd;}
+  .scn button.rec{background:#3a0000;border-color:#5a0000;color:#ffb3b3;}
+  .scn button.play{background:#0c2a12;border-color:#194d24;color:#b6f5c4;}
+  .log{font-size:12px;color:var(--dim);max-height:120px;overflow:auto;margin-top:8px;font-variant-numeric:tabular-nums;}
+  .toggle{display:flex;gap:8px;align-items:center;font-size:13px;color:#ccc;}
+  .switch{position:relative;width:44px;height:24px;background:#333;border-radius:12px;transition:.2s;}
+  .switch.on{background:var(--ecg);}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.2s;}
+  .switch.on::after{left:22px;}
+  .connpill{margin-left:auto;font-size:12px;color:var(--dim);}
+  .connpill.on{color:var(--ecg);}
+</style>
+</head>
+<body>
+
+<!-- ============ ROLE CHOOSER ============ -->
+<div id="chooser">
+  <h1>FoamFrat <span>Sim Monitor</span></h1>
+  <p>Open the <b>Monitor</b> on the iPad and the <b>Control</b> on your laptop, using the same room code. They pair over the internet — no same-wifi required.</p>
+  <div class="roomrow">
+    <span style="color:var(--dim)">Room code</span>
+    <input id="roomInput" maxlength="5" autocomplete="off" spellcheck="false">
+    <button class="ghost" id="genRoom">New code</button>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="ic">🫀</div>
+      <h2>Monitor</h2>
+      <small>Run this on the iPad. Shows waveforms &amp; vitals. Add to Home Screen for fullscreen.</small>
+      <button class="btn" data-role="monitor">Open Monitor</button>
+    </div>
+    <div class="card">
+      <div class="ic">🎛️</div>
+      <h2>Control</h2>
+      <small>Run this on your laptop. Drive vitals live and record scenarios.</small>
+      <button class="btn alt" data-role="control">Open Control</button>
+    </div>
+  </div>
+  <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
+</div>
+
+<!-- ============ MONITOR (X Series style) ============ -->
+<div id="monitor">
+  <div class="topbar">
+    <span class="date" id="mDate">—</span>
+    <span class="dot" id="mDot"></span>
+    <span class="pt" id="mPatient">Adult</span>
+    <span class="room">Room <span id="mRoom"></span></span>
+    <span class="batt">100%</span>
+    <span class="clock" id="mClock">00:00:00</span>
+  </div>
+  <div class="grid">
+    <!-- Row 1: ECG II -->
+    <div class="wave ecg"><span class="wlabel">II<span class="sc">1.0 cm/mV</span></span>
+      <canvas id="cEcg"></canvas><div class="alarmbanner" id="banner"></div></div>
+    <div class="num hr" id="nHr"><div class="lab">HR<span class="u">bpm</span></div><div class="val">--</div></div>
+
+    <!-- Row 2: ART arterial line -->
+    <div class="wave art" id="wArt"><span class="wlabel" id="lArt">ART<span class="sc">0 to 180 mmHg</span></span>
+      <span class="wscale" style="top:18%">180</span><span class="wscale" style="top:50%">90</span>
+      <span class="wscale" style="top:82%">0</span><canvas id="cArt"></canvas></div>
+    <div class="num nibp" id="nNibp"><div class="lab">NIBP<span class="u">mmHg</span></div>
+      <div class="val">--/--</div><div class="sub">(<span id="nMap">--</span>)</div></div>
+
+    <!-- Row 3: Capnography -->
+    <div class="wave co2"><span class="wlabel">CO₂<span class="sc">0 to 60 mmHg</span></span>
+      <span class="wscale" style="top:18%">60</span><span class="wscale" style="top:50%">30</span>
+      <span class="wscale" style="top:82%">0</span><canvas id="cCo2"></canvas></div>
+    <div class="num etco2" id="nEtco2"><div class="lab">EtCO₂<span class="u">mmHg</span></div>
+      <div class="val">--</div><div class="sub">BR <b id="nRr">--</b></div></div>
+
+    <!-- Row 4: SpO2 pleth -->
+    <div class="wave spo2"><span class="wlabel">SpO₂<span class="sc">1 X</span></span><canvas id="cPleth"></canvas></div>
+    <div class="num spo2" id="nSpo2"><div class="lab">SpO₂<span class="u">%</span></div><div class="val">--</div></div>
+  </div>
+  <!-- bottom parameter strip -->
+  <div class="botbar">
+    <div class="botbox art off" id="bArt"><div class="lab">ART<span class="u"> mmHg</span></div><div class="val">--</div></div>
+    <div class="botbox p off"><div class="lab">P2<span class="u"> mmHg</span></div><div class="val">--</div></div>
+    <div class="botbox p off"><div class="lab">P3<span class="u"> mmHg</span></div><div class="val">--</div></div>
+    <div class="botbox temp" id="bTemp"><div class="lab">Temp<span class="u"> °C</span></div><div class="val">--</div></div>
+  </div>
+</div>
+
+<!-- ============ CONTROL ============ -->
+<div id="control">
+  <div class="chead">
+    <b>FoamFrat Control</b>
+    <span>Room <span class="room" id="cRoom"></span></span>
+    <span class="connpill" id="cConn">connecting…</span>
+  </div>
+  <div class="cwrap">
+    <div class="box">
+      <h3>Rhythm</h3>
+      <div class="rhythms" id="rhythmBtns"></div>
+    </div>
+
+    <div class="box">
+      <h3>Vital Signs</h3>
+      <div class="field"><label>Heart Rate <b id="lHr">80</b> bpm</label><input type="range" id="sHr" min="0" max="250" value="80"></div>
+      <div class="field"><label>SpO₂ <b id="lSpo2">98</b> %</label><input type="range" id="sSpo2" min="50" max="100" value="98"></div>
+      <div class="field"><label>Resp Rate <b id="lRr">16</b> /min</label><input type="range" id="sRr" min="0" max="60" value="16"></div>
+      <div class="field"><label>EtCO₂ <b id="lEtco2">38</b> mmHg</label><input type="range" id="sEtco2" min="0" max="100" value="38"></div>
+      <div class="field"><label>Systolic <b id="lSys">120</b> mmHg</label><input type="range" id="sSys" min="40" max="250" value="120"></div>
+      <div class="field"><label>Diastolic <b id="lDia">80</b> mmHg</label><input type="range" id="sDia" min="20" max="150" value="80"></div>
+      <div class="field"><label>Temp <b id="lTemp">37.0</b> °C</label><input type="range" id="sTemp" min="30" max="42" step="0.1" value="37"></div>
+    </div>
+
+    <div class="box">
+      <h3>Quick Events</h3>
+      <div class="quick" id="quickBtns"></div>
+      <div style="margin-top:14px" class="toggle">
+        <div class="switch on" id="swPulse"></div><span>Monitor beep / pulse tone</span>
+      </div>
+      <div style="margin-top:10px" class="toggle">
+        <div class="switch" id="swAline"></div><span>Arterial line (A-line) placed — show ART waveform</span>
+      </div>
+      <div style="margin-top:10px" class="toggle">
+        <div class="switch" id="swPea"></div><span>Pulseless (PEA) — electrical activity, no pulse</span>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3>Scenario Recorder</h3>
+      <div class="scn">
+        <button class="rec" id="btnRec">● Record</button>
+        <button class="play" id="btnPlay">▶ Play</button>
+        <button id="btnStop">■ Stop</button>
+        <button id="btnClear">Clear</button>
+      </div>
+      <div class="log" id="scnLog">No scenario recorded.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   FoamFrat Sim Monitor — single file. Roles: monitor (iPad) / control (laptop)
+   Transport: MQTT over WSS (public broker) keyed by room code, with
+   BroadcastChannel fallback for same-device demo.
+   ========================================================================= */
+"use strict";
+
+/* ---------- shared state model ---------- */
+const STATE = {
+  rhythm:"sinus", hr:80, spo2:98, rr:16, etco2:38,
+  sys:120, dia:80, temp:37.0, pulse:true, pea:false, aline:false,
+  patient:"Adult"
+};
+
+/* ---------- room + role ---------- */
+const params=new URLSearchParams(location.search);
+function randRoom(){return Math.random().toString(36).slice(2,7).toUpperCase();}
+let ROOM=(params.get("room")||localStorage.getItem("ffroom")||randRoom()).toUpperCase();
+let ROLE=params.get("role")||null;
+
+/* =========================================================================
+   TRANSPORT
+   ========================================================================= */
+const TOPIC=()=>`foamfrat/simmon/${ROOM}/state`;
+let mqttClient=null, bc=null, connected=false;
+const onState=[];
+
+function broadcast(){
+  const payload=JSON.stringify(STATE);
+  try{ if(mqttClient&&mqttClient.connected) mqttClient.publish(TOPIC(),payload,{retain:true}); }catch(e){}
+  try{ if(bc) bc.postMessage(payload); }catch(e){}
+}
+function applyState(obj){ Object.assign(STATE,obj); onState.forEach(f=>f()); }
+
+function connect(){
+  // BroadcastChannel = instant same-device sync (two tabs/windows)
+  try{ bc=new BroadcastChannel("foamfrat-"+ROOM);
+       bc.onmessage=e=>{ try{applyState(JSON.parse(e.data));}catch(_){}}; }catch(e){}
+  // MQTT = cross-device over the internet
+  try{
+    mqttClient=mqtt.connect("wss://broker.emqx.io:8084/mqtt",
+      {clientId:"ff_"+ROLE+"_"+Math.random().toString(16).slice(2,8),
+       reconnectPeriod:2000,connectTimeout:8000});
+    mqttClient.on("connect",()=>{
+      connected=true; setConn(true);
+      mqttClient.subscribe(TOPIC());
+      if(ROLE==="control") broadcast();           // push current state to monitor
+    });
+    mqttClient.on("reconnect",()=>setConn(false));
+    mqttClient.on("close",()=>{connected=false;setConn(false);});
+    mqttClient.on("message",(t,msg)=>{ try{applyState(JSON.parse(msg.toString()));}catch(_){}});
+  }catch(e){ setConn(false); }
+}
+function setConn(ok){
+  const dot=document.getElementById("mDot"); if(dot) dot.classList.toggle("on",ok);
+  const pill=document.getElementById("cConn");
+  if(pill){ pill.textContent=ok?"● connected · room "+ROOM:"connecting…"; pill.classList.toggle("on",ok); }
+}
+
+/* =========================================================================
+   ECG / RHYTHM ENGINE
+   Streaming sample generator. value() returns mV at current beat phase.
+   ========================================================================= */
+function gauss(x,c,w,a){const d=(x-c)/w;return a*Math.exp(-0.5*d*d);}
+
+// per-rhythm beat morphology parameters
+const RHYTHMS={
+  sinus:        {label:"Sinus",        hr:80,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
+  sinus_brady:  {label:"Sinus Brady",  hr:45,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
+  sinus_tach:   {label:"Sinus Tach",   hr:130, p:.12, pr:.14, qrs:.08, r:1.1, st:0,    t:.25, irregular:0},
+  afib:         {label:"A-Fib",        hr:110, p:0,   pr:.12, qrs:.09, r:1.1, st:0,    t:.28, irregular:.35},
+  vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.04, wide:1},
+  vfib:         {label:"V-Fib",        hr:0,   special:"vf"},
+  asystole:     {label:"Asystole",     hr:0,   special:"asys"},
+  pea:          {label:"PEA",          hr:50,  p:.12, pr:.18, qrs:.11, r:.9,  st:0,    t:.2, irregular:0, pulseless:1},
+  avb1:         {label:"1° AV Block",  hr:70,  p:.15, pr:.32, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
+  avb2_1:       {label:"2° Mobitz I",  hr:60,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, wenckebach:1},
+  avb2_2:       {label:"2° Mobitz II", hr:60,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, mobitz2:1},
+  avb3:         {label:"3° (Complete)",hr:38,  p:.15, pr:.16, qrs:.16, r:1.0, st:0,    t:.30, chb:1, wide:1},
+  pvc:          {label:"Sinus + PVCs", hr:75,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, pvc:.2},
+  pac:          {label:"Sinus + PACs", hr:75,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, pac:.2},
+  paced:        {label:"Paced",        hr:70,  p:0,   pr:0,   qrs:.14, r:1.0, st:0,    t:.30, paced:1, wide:1},
+  stemi:        {label:"STEMI",        hr:88,  p:.15, pr:.16, qrs:.09, r:1.2, st:.28,  t:.40, irregular:0},
+  ischemia:     {label:"Ischemia",     hr:92,  p:.15, pr:.16, qrs:.09, r:1.2, st:-.18, t:-.2, irregular:0}
+};
+
+class EcgEngine{
+  constructor(){this.t=0;this.beatT=0;this.beatLen=.75;this.beat=null;this.pPhase=0;
+    this.wenck=0;this.mobCount=0;this.scheduleNext(true);}
+  cfg(){return RHYTHMS[STATE.rhythm]||RHYTHMS.sinus;}
+  effHr(){ // HR shown follows slider but rhythm imposes character
+    const c=this.cfg();
+    if(c.special) return STATE.rhythm==="vfib"? (250+Math.random()*40)|0 : 0;
+    return STATE.hr;
+  }
+  scheduleNext(first){
+    const c=this.cfg();
+    let hr=STATE.hr>0?STATE.hr:c.hr; if(hr<=0)hr=c.hr||60;
+    let rr=60/Math.max(hr,1);
+    if(c.irregular) rr*= (1+ (Math.random()*2-1)*c.irregular);
+    // beat type decision
+    let type="normal", dropped=false;
+    if(c.pvc && Math.random()<c.pvc) type="pvc";
+    else if(c.pac && Math.random()<c.pac){type="pac"; rr*=0.6;}
+    if(c.wenckebach){ this.wenck++; if(this.wenck>=4){dropped=true;this.wenck=0;} }
+    if(c.mobitz2){ this.mobCount++; if(this.mobCount%3===0) dropped=true; }
+    this.beat={type,dropped,pr:c.pr,c};
+    this.beatLen=rr; this.beatT=0;
+  }
+  step(dt){
+    this.t+=dt; this.beatT+=dt;
+    // independent atrial activity for complete heart block
+    this.pPhase+=dt;
+    if(this.beatT>=this.beatLen) this.scheduleNext(false);
+  }
+  value(){
+    const c=this.cfg();
+    if(c.special==="asys") return (Math.random()-0.5)*0.015 + Math.sin(this.t*0.7)*0.01;
+    if(c.special==="vf"){
+      // chaotic band-limited noise
+      let v=0; v+=Math.sin(this.t*38+1)*0.4; v+=Math.sin(this.t*61+2)*0.3;
+      v+=Math.sin(this.t*97)*0.2; v+=(Math.random()-0.5)*0.25; return v*0.8;
+    }
+    const b=this.beat, tau=this.beatT; let v=0;
+    // independent P waves marching for complete heart block
+    if(c.chb){
+      const pRate=75, pp=60/pRate, pp_t=(this.pPhase%pp);
+      v+=gauss(pp_t,0.05,0.022,0.18);
+    }
+    if(b.dropped){ // P wave but no conducted QRS
+      if(c.p) v+=gauss(tau,0.05,0.022,c.p);
+      return v;
+    }
+    if(b.type==="pvc"){ // wide bizarre, no P, opposite T
+      v+=gauss(tau,0.10,0.055,-1.5);
+      v+=gauss(tau,0.17,0.05,0.6);
+      v+=gauss(tau,0.34,0.08,0.5);
+      return v;
+    }
+    // P wave (skip for complete heart block's conducted beats — they're dissociated)
+    if(c.p && !c.chb) v+=gauss(tau,0.05,0.022,c.p);
+    if(c.paced) v+= (tau>0.01&&tau<0.02)? 1.6 : 0; // pacing spike
+    const pr=b.pr||0.16;
+    const qc=pr, rc=pr+0.025, sc=pr+0.055;
+    const wide=c.wide?1.9:1;
+    v+=gauss(tau,qc,0.012*wide,-0.12);
+    v+=gauss(tau,rc,0.014*wide,c.r);
+    v+=gauss(tau,sc,0.016*wide,-0.28);
+    // ST segment + T wave
+    const stStart=sc+0.02, tC=pr+0.30;
+    if(tau>stStart && tau<tC) v+=c.st;            // ST offset
+    v+=gauss(tau,tC,0.06,c.t);
+    return v;
+  }
+}
+
+/* =========================================================================
+   MONITOR RENDERING
+   ========================================================================= */
+function runMonitor(){
+  document.getElementById("chooser").style.display="none";
+  document.getElementById("monitor").style.display="flex";
+  document.getElementById("mRoom").textContent=ROOM;
+
+  const ecg=new EcgEngine();
+  const FS_pps=240;          // pixels per second sweep speed feel
+  const noPulse=()=> (!STATE.pulse||STATE.pea||STATE.rhythm==="vfib"||STATE.rhythm==="asystole");
+  // X Series channel order: ECG II, ART, CO2, SpO2 pleth
+  const waves=[
+    setupWave("cEcg",  ()=>ecg.value(), {amp:0.26,     base:0.60, color:getCss("--ecg")}),
+    setupWave("cArt",  ()=>artVal(),    {amp:0.64/180, base:0.82, color:getCss("--art")}),
+    setupWave("cCo2",  ()=>co2Val(),    {amp:0.64/60,  base:0.82, color:getCss("--co2"), speed:.55}),
+    setupWave("cPleth",()=>plethVal(),  {amp:0.42,     base:0.80, color:getCss("--spo2")})
+  ];
+
+  // pleth synced to ECG beats
+  let plethPhase=0;
+  function plethVal(){
+    if(noPulse()||STATE.spo2<1) return 0;
+    const hr=STATE.hr>0?STATE.hr:60, period=60/hr;
+    const x=(plethPhase%period)/period;
+    let y=Math.exp(-Math.pow((x-0.18)/0.13,2))*1.0 + Math.exp(-Math.pow((x-0.42)/0.10,2))*0.35;
+    return Math.min(y,1.1)*(STATE.spo2/100);
+  }
+
+  // ART arterial pressure (mmHg) — only when an A-line is placed
+  let artPhase=0;
+  function artVal(){
+    if(!STATE.aline) return null;          // pen up: channel blank when no A-line
+    if(STATE.sys<=0) return 0;
+    if(noPulse()) return 0;                // flat line in arrest
+    const hr=STATE.hr>0?STATE.hr:60, period=60/hr, x=(artPhase%period)/period;
+    let s=Math.exp(-Math.pow((x-0.16)/0.07,2))*1.0      // systolic upstroke/peak
+         +Math.exp(-Math.pow((x-0.34)/0.06,2))*0.42;    // dicrotic wave
+    s=Math.min(s,1);
+    return STATE.dia + (STATE.sys-STATE.dia)*s;          // mmHg between dia and sys
+  }
+
+  // Capnography (mmHg), peak = EtCO2
+  let co2Phase=0;
+  function co2Val(){
+    if(STATE.rr<1) return 0;
+    const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
+    if(x<0.18) return 0;                          // inspiratory baseline
+    if(x<0.28) return et*((x-0.18)/0.10);         // expiratory upstroke
+    if(x<0.80) return et*(0.93+0.07*((x-0.28)/0.52)); // alveolar plateau (slight rise)
+    if(x<0.86) return et*Math.max(0,1-(x-0.80)/0.06); // sharp downstroke
+    return 0;
+  }
+
+  let beep=null;
+  function tone(freq,dur,vol){
+    if(!STATE.pulse) return;
+    try{ beep=beep||new (window.AudioContext||window.webkitAudioContext)();
+      const o=beep.createOscillator(),g=beep.createGain();
+      o.frequency.value=freq;o.connect(g);g.connect(beep.destination);
+      g.gain.setValueAtTime(vol,beep.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001,beep.currentTime+dur);
+      o.start();o.stop(beep.currentTime+dur);
+    }catch(e){}
+  }
+  let lastBeatPhase=1;
+  // unlock audio on first touch (iOS)
+  document.body.addEventListener("touchstart",()=>{if(beep&&beep.state==="suspended")beep.resume();},{once:true});
+  document.body.addEventListener("click",()=>{if(!beep){tone(1,0.01,0.0001);}},{once:true});
+
+  let last=performance.now();
+  const SIM_DT=1/500;           // fixed 500 Hz simulation step -> smooth waveforms
+  let acc=0;
+  function frame(now){
+    let dt=Math.min((now-last)/1000,0.1); last=now;
+    acc+=dt;
+    while(acc>=SIM_DT){
+      ecg.step(SIM_DT); plethPhase+=SIM_DT; co2Phase+=SIM_DT; artPhase+=SIM_DT;
+      // QRS beep detection: one beep per beat, pitch tracks SpO2 (classic)
+      if(STATE.pulse && !STATE.pea && STATE.rhythm!=="asystole"){
+        const bp=ecg.beatT/ecg.beatLen;
+        if(bp<lastBeatPhase){
+          const f=600+(STATE.spo2-90)*8;
+          if(STATE.rhythm!=="vfib") tone(Math.max(400,f),0.07,0.18);
+        }
+        lastBeatPhase=bp;
+      }
+      waves.forEach(w=>w.tick(SIM_DT));
+      acc-=SIM_DT;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // numbers + alarms
+  const map=Math.round; // alias
+  function updNums(){
+    const hrShow = STATE.rhythm==="asystole"?0 : (STATE.rhythm==="vfib"?"--":STATE.hr);
+    setNum("nHr",hrShow);
+    setNum("nSpo2",STATE.pea?"--":STATE.spo2);
+    setNum("nEtco2",STATE.etco2);
+    document.getElementById("nRr").textContent=STATE.rr;
+    document.querySelector("#nNibp .val").textContent=STATE.sys+"/"+STATE.dia;
+    document.getElementById("nMap").textContent=Math.round((STATE.sys+2*STATE.dia)/3);
+    document.querySelector("#bTemp .val").textContent=STATE.temp.toFixed(1);
+    document.getElementById("mPatient").textContent=STATE.patient;
+    // A-line: show/hide ART waveform label state + bottom ART box
+    const aOn=STATE.aline;
+    document.getElementById("wArt").classList.toggle("off",!aOn);
+    document.getElementById("lArt").firstChild.textContent= aOn?"ART":"ART (no line)";
+    const bArt=document.getElementById("bArt");
+    bArt.classList.toggle("off",!aOn || STATE.sys<=0);
+    bArt.querySelector(".val").textContent = (aOn&&STATE.sys>0)
+      ? (STATE.sys+"/"+STATE.dia+" ("+Math.round((STATE.sys+2*STATE.dia)/3)+")") : "--";
+    // alarms
+    alarm("nHr", (STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole");
+    alarm("nSpo2", !STATE.pea && STATE.spo2<90);
+    alarm("nEtco2", STATE.etco2<25||STATE.etco2>55);
+    alarm("nNibp", STATE.sys<90||STATE.sys>180);
+    const crit=(STATE.rhythm==="vfib"||STATE.rhythm==="asystole"||STATE.rhythm==="vt"||STATE.pea);
+    const banner=document.getElementById("banner");
+    if(crit){banner.style.display="block";
+      banner.textContent= STATE.pea?"** PEA — CHECK PULSE **":("** "+(RHYTHMS[STATE.rhythm].label).toUpperCase()+" **");}
+    else banner.style.display="none";
+  }
+  function setNum(id,v){document.querySelector("#"+id+" .val").textContent=v;}
+  function alarm(id,on){document.getElementById(id).classList.toggle("alarm",!!on);}
+  onState.push(updNums); updNums();
+
+  // top bar date + elapsed case timer
+  const t0=Date.now();
+  setInterval(()=>{
+    const d=new Date();
+    document.getElementById("mDate").textContent=
+      d.toLocaleDateString(undefined,{month:"2-digit",day:"2-digit",year:"numeric"})+"  "+
+      d.toLocaleTimeString(undefined,{hour12:false});
+    const s=Math.floor((Date.now()-t0)/1000);
+    const hh=String(Math.floor(s/3600)).padStart(2,"0"),
+          mm=String(Math.floor(s%3600/60)).padStart(2,"0"),
+          ss=String(s%60).padStart(2,"0");
+    document.getElementById("mClock").textContent=hh+":"+mm+":"+ss;
+  },1000);
+
+  function setupWave(canvasId,fn,opt){
+    const cv=document.getElementById(canvasId);
+    const ctx=cv.getContext("2d");
+    let W,H,x=0,prevY=null;
+    function resize(){const r=cv.getBoundingClientRect();
+      cv.width=r.width*devicePixelRatio;cv.height=r.height*devicePixelRatio;
+      W=cv.width;H=cv.height;ctx.lineWidth=2*devicePixelRatio;
+      ctx.lineCap="round";ctx.lineJoin="round";
+      ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);x=0;prevY=null;}
+    new ResizeObserver(resize).observe(cv); resize();
+    const pps=FS_pps*devicePixelRatio*(opt.speed||1);
+    // tick runs once per fine simulation sub-step, so dt is tiny and fn()
+    // returns a fresh sample each call -> smooth trace, no staircase.
+    return {tick(dt){
+      const nx=x+pps*dt;
+      ctx.fillStyle="#000";ctx.fillRect(nx,0,8*devicePixelRatio,H); // blanking cursor
+      const val=fn();
+      if(val===null){ prevY=null; x=nx; if(x>=W)x=0; return; } // pen up: blank channel
+      const yy=H*opt.base - val*opt.amp*H;   // baseline at opt.base*H, +ve goes up
+      if(prevY!==null){
+        ctx.strokeStyle=opt.color;ctx.beginPath();
+        ctx.moveTo(x,prevY);ctx.lineTo(nx,yy);ctx.stroke();
+      }
+      prevY=yy; x=nx;
+      if(x>=W){x=0;prevY=null;}
+    }};
+  }
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+/* =========================================================================
+   CONTROL UI
+   ========================================================================= */
+function runControl(){
+  document.getElementById("chooser").style.display="none";
+  document.getElementById("control").style.display="flex";
+  document.getElementById("cRoom").textContent=ROOM;
+
+  // rhythm buttons
+  const rb=document.getElementById("rhythmBtns");
+  Object.keys(RHYTHMS).forEach(k=>{
+    const b=document.createElement("button");b.textContent=RHYTHMS[k].label;b.dataset.k=k;
+    if(k===STATE.rhythm)b.classList.add("active");
+    b.onclick=()=>{ STATE.rhythm=k;
+      // sensible default HR for the rhythm
+      if(RHYTHMS[k].hr) {STATE.hr=RHYTHMS[k].hr; syncSliders();}
+      STATE.pea=(k==="pea"); document.getElementById("swPea").classList.toggle("on",STATE.pea);
+      [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===k));
+      push("rhythm "+RHYTHMS[k].label);
+    };
+    rb.appendChild(b);
+  });
+
+  // sliders
+  const map=[["sHr","hr","lHr",1],["sSpo2","spo2","lSpo2",1],["sRr","rr","lRr",1],
+    ["sEtco2","etco2","lEtco2",1],["sSys","sys","lSys",1],["sDia","dia","lDia",1],["sTemp","temp","lTemp",1]];
+  map.forEach(([sid,key,lid])=>{
+    const s=document.getElementById(sid);
+    s.value=STATE[key];
+    s.oninput=()=>{STATE[key]= key==="temp"?parseFloat(s.value):parseInt(s.value);
+      document.getElementById(lid).textContent= key==="temp"?STATE.temp.toFixed(1):STATE[key];
+      push(null);};
+  });
+  function syncSliders(){map.forEach(([sid,key,lid])=>{
+    document.getElementById(sid).value=STATE[key];
+    document.getElementById(lid).textContent=key==="temp"?STATE.temp.toFixed(1):STATE[key];});}
+
+  // quick events
+  const quick=[
+    ["Code: VF arrest",()=>setMany({rhythm:"vfib",spo2:60,sys:0,dia:0,etco2:12,pea:false})],
+    ["Asystole",()=>setMany({rhythm:"asystole",hr:0,spo2:50,sys:0,dia:0,etco2:8})],
+    ["ROSC",()=>setMany({rhythm:"sinus_tach",hr:118,spo2:92,sys:96,dia:60,etco2:35,pea:false})],
+    ["Hypoxia",()=>setMany({spo2:78,hr:124})],
+    ["Hypotension",()=>setMany({sys:74,dia:44})],
+    ["Sepsis",()=>setMany({rhythm:"sinus_tach",hr:122,spo2:91,sys:84,dia:50,temp:38.9,rr:26})],
+    ["Reset normal",()=>setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:37,pea:false})]
+  ];
+  const qb=document.getElementById("quickBtns");
+  quick.forEach(([lab,fn])=>{const b=document.createElement("button");b.textContent=lab;
+    b.onclick=()=>{fn();push(lab);};qb.appendChild(b);});
+  function setMany(o){Object.assign(STATE,o);
+    [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===STATE.rhythm));
+    document.getElementById("swPea").classList.toggle("on",STATE.pea);
+    document.getElementById("swAline").classList.toggle("on",STATE.aline);
+    syncSliders();}
+
+  // toggles
+  document.getElementById("swPulse").onclick=e=>{STATE.pulse=!STATE.pulse;e.target.classList.toggle("on",STATE.pulse);push(null);};
+  document.getElementById("swAline").onclick=e=>{STATE.aline=!STATE.aline;e.target.classList.toggle("on",STATE.aline);push("A-line "+(STATE.aline?"placed":"removed"));};
+  document.getElementById("swPea").onclick=e=>{STATE.pea=!STATE.pea;e.target.classList.toggle("on",STATE.pea);push("PEA "+STATE.pea);};
+
+  /* ---- scenario recorder ---- */
+  let recording=false, recStart=0, script=[], playing=false, timers=[];
+  const logEl=document.getElementById("scnLog");
+  function logRender(){ if(!script.length){logEl.textContent= recording?"● recording…":"No scenario recorded.";return;}
+    logEl.innerHTML=script.map(s=>`+${s.t.toFixed(1)}s — ${s.label||"vitals"}`).join("<br>");}
+  function push(label){
+    broadcast();
+    if(recording){script.push({t:(performance.now()-recStart)/1000,label,state:JSON.parse(JSON.stringify(STATE))});logRender();}
+  }
+  document.getElementById("btnRec").onclick=function(){
+    recording=!recording; this.style.opacity=recording?1:.6;
+    if(recording){recStart=performance.now();script=[];this.textContent="● Recording…";
+      script.push({t:0,label:"start",state:JSON.parse(JSON.stringify(STATE))});}
+    else this.textContent="● Record";
+    logRender();
+  };
+  document.getElementById("btnPlay").onclick=()=>{
+    if(!script.length||playing)return; playing=true;
+    timers.forEach(clearTimeout);timers=[];
+    script.forEach(s=>{timers.push(setTimeout(()=>{
+      Object.assign(STATE,s.state);setMany({});broadcast();
+      logEl.innerHTML="▶ "+ (s.label||"vitals")+" (+"+s.t.toFixed(1)+"s)";
+    },s.t*1000));});
+    timers.push(setTimeout(()=>{playing=false;logRender();},(script[script.length-1].t+0.3)*1000));
+  };
+  document.getElementById("btnStop").onclick=()=>{playing=false;timers.forEach(clearTimeout);timers=[];logRender();};
+  document.getElementById("btnClear").onclick=()=>{script=[];recording=false;
+    document.getElementById("btnRec").textContent="● Record";logRender();};
+
+  syncSliders();
+  setInterval(broadcast,4000); // heartbeat so late-joining monitor catches up
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+function start(role){
+  ROLE=role; localStorage.setItem("ffroom",ROOM);
+  connect();
+  if(role==="monitor") runMonitor(); else runControl();
+}
+(function init(){
+  const inp=document.getElementById("roomInput"); inp.value=ROOM;
+  inp.oninput=()=>{ROOM=(inp.value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");};
+  document.getElementById("genRoom").onclick=()=>{ROOM=randRoom();inp.value=ROOM;};
+  document.querySelectorAll("[data-role]").forEach(b=>{
+    b.onclick=()=>{ if(!ROOM){alert("Enter a room code");return;} start(b.dataset.role); };
+  });
+  if(ROLE){ start(ROLE); }   // deep-link via ?role=...&room=...
+})();
+</script>
+</body>
+</html>

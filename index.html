@@ -325,6 +325,9 @@
   .clot{fill:#ff5a5f;filter:drop-shadow(0 0 4px #ff5a5f);transform-box:fill-box;transform-origin:center;animation:clotpulse 2.4s ease-in-out infinite}
   @keyframes clotpulse{0%,100%{opacity:.2;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
 
+  /* sim monitor multi-trace */
+  .pleth-path{fill:none;stroke:var(--amber);stroke-width:2.2;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.4s linear infinite}
+
   footer{
     position:relative;
     z-index:10;
@@ -388,6 +391,36 @@
           <span class="badge">1 PLAYER</span>
         </div>
         <a class="play" href="https://rhythm.foamfratsandbox.com/">PLAY ►</a>
+      </div>
+
+      <!-- Sim Monitor cabinet -->
+      <div class="cabinet">
+        <div class="cab-marquee">SIM MONITOR</div>
+        <div class="screen">
+          <span class="scr-label">ECG II</span>
+          <span class="scr-bpm">80 BPM</span>
+          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+            <path class="ecg-path" d="
+              M0,74 L52,74 L64,74 Q70,68 76,74
+              L108,74 L120,74 L126,52 L138,104 L148,24 L160,98 L170,74
+              L208,74 L220,74 Q226,68 232,74
+              L300,74 L312,74 L318,52 L330,104 L340,24 L352,98 L362,74
+              L404,74 L416,74 Q422,68 428,74
+              L498,74 L510,74 L516,52 L528,104 L538,24 L550,98 L560,74 L600,74" />
+            <path class="pleth-path" d="
+              M0,138 Q30,138 44,118 Q58,98 78,118 Q92,132 110,138
+              L150,138 Q180,138 194,118 Q208,98 228,118 Q242,132 260,138
+              L300,138 Q330,138 344,118 Q358,98 378,118 Q392,132 410,138
+              L450,138 Q480,138 494,118 Q508,98 528,118 Q542,132 560,138 L600,138" />
+          </svg>
+        </div>
+        <h2 class="cab-title">Sim Monitor</h2>
+        <p class="cab-sub">Program vitals · push live to any screen</p>
+        <div class="badges">
+          <span class="badge on">2 PLAYER</span>
+          <span class="badge">iPAD READY</span>
+        </div>
+        <a class="play" href="monitor.html">PLAY ►</a>
       </div>
 
       <!-- Venous Return cabinet -->
