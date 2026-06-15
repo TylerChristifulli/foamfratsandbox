@@ -66,7 +66,7 @@
   .wave.art .wlabel{color:var(--art);}
   .wave.co2 .wlabel{color:var(--co2);}
   .wave.spo2 .wlabel{color:var(--spo2);}
-  .wave.off .wlabel{color:#666;}
+  .wave.art.off .wlabel,.wave.art.off .wscale{display:none;} /* hide ART channel when no A-line */
   .wscale{position:absolute;left:4px;font-size:9px;color:#5a5a5a;z-index:2;}
 
   .num{background:#000;display:flex;flex-direction:column;justify-content:center;
@@ -517,11 +517,13 @@ function runMonitor(){
     // A-line: show/hide ART waveform label state + bottom ART box
     const aOn=STATE.aline;
     document.getElementById("wArt").classList.toggle("off",!aOn);
-    document.getElementById("lArt").firstChild.textContent= aOn?"ART":"ART (no line)";
     const bArt=document.getElementById("bArt");
-    bArt.classList.toggle("off",!aOn || STATE.sys<=0);
-    bArt.querySelector(".val").textContent = (aOn&&STATE.sys>0)
-      ? (STATE.sys+"/"+STATE.dia+" ("+Math.round((STATE.sys+2*STATE.dia)/3)+")") : "--";
+    bArt.style.display = aOn ? "flex" : "none";          // hide ART box entirely when no A-line
+    if(aOn){
+      bArt.classList.toggle("off",STATE.sys<=0);
+      bArt.querySelector(".val").textContent = STATE.sys>0
+        ? (STATE.sys+"/"+STATE.dia+" ("+Math.round((STATE.sys+2*STATE.dia)/3)+")") : "--";
+    }
     // alarms
     alarm("nHr", (STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole");
     alarm("nSpo2", !STATE.pea && STATE.spo2<90);
