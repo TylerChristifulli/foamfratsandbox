@@ -138,6 +138,7 @@
   #control{display:none;height:100%;flex-direction:column;background:#0c0c0c;}
   .chead{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);}
   .chead b{font-size:16px;} .chead .room{color:var(--ecg);font-weight:700;letter-spacing:2px;}
+  .brandlogo{height:30px;width:auto;}
   .cwrap{flex:1;overflow:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;align-content:start;}
   .box{background:#121212;border:1px solid #242424;border-radius:14px;padding:16px;}
   .box h3{margin:0 0 12px;font-size:14px;color:#cfcfcf;letter-spacing:.5px;text-transform:uppercase;}
@@ -296,7 +297,8 @@
 <!-- ============ CONTROL ============ -->
 <div id="control">
   <div class="chead">
-    <b>FoamFrat Control</b>
+    <img class="brandlogo" src="foamfrat-logo.png" alt="" onerror="this.style.display='none'">
+    <b>FOAMfrat Control Room</b>
     <span>Room <span class="room" id="cRoom"></span></span>
     <span class="connpill" id="cConn">connecting…</span>
   </div>
