@@ -70,6 +70,11 @@
   .wave.co2 .wlabel{color:var(--co2);}
   .wave.spo2 .wlabel{color:var(--spo2);}
   .wscale{position:absolute;left:4px;font-size:9px;color:#5a5a5a;z-index:2;}
+  .tapover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;
+    background:rgba(0,0,0,.5);color:#9fb4c8;font-size:15px;font-weight:700;letter-spacing:.4px;
+    cursor:pointer;z-index:4;text-align:center;border:1px dashed #2c4258;}
+  .tapover::before{content:"⊕";font-size:20px;color:#5aa0d8;}
+  .tapover.hidden{display:none;}
   .estat{position:absolute;top:3px;right:10px;font-size:11px;font-weight:700;color:var(--co2);z-index:2;letter-spacing:.3px;}
   .shockflash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     background:#ffcf00;color:#1a1400;font-weight:800;font-size:18px;padding:8px 18px;border-radius:8px;
@@ -207,7 +212,8 @@
       <div class="wave ecg"><span class="wlabel">II<span class="sc">1.0 cm/mV</span></span>
         <span class="estat" id="ecgStat"></span>
         <canvas id="cEcg"></canvas><div class="alarmbanner" id="banner"></div>
-        <div class="shockflash" id="shockFlash"></div></div>
+        <div class="shockflash" id="shockFlash"></div>
+        <div class="tapover" data-ch="ecg">Tap to connect ECG</div></div>
       <!-- ART arterial line (collapses when no A-line) -->
       <div class="wave art" id="wArt"><span class="wlabel" id="lArt">ART<span class="sc">0 to 180 mmHg</span></span>
         <span class="wscale" style="top:18%">180</span><span class="wscale" style="top:50%">90</span>
@@ -215,9 +221,11 @@
       <!-- Capnography -->
       <div class="wave co2"><span class="wlabel">CO₂<span class="sc">0 to 60 mmHg</span></span>
         <span class="wscale" style="top:18%">60</span><span class="wscale" style="top:50%">30</span>
-        <span class="wscale" style="top:82%">0</span><canvas id="cCo2"></canvas></div>
+        <span class="wscale" style="top:82%">0</span><canvas id="cCo2"></canvas>
+        <div class="tapover" data-ch="co2">Tap to connect EtCO₂</div></div>
       <!-- SpO2 pleth -->
-      <div class="wave spo2"><span class="wlabel">SpO₂<span class="sc">1 X</span></span><canvas id="cPleth"></canvas></div>
+      <div class="wave spo2"><span class="wlabel">SpO₂<span class="sc">1 X</span></span><canvas id="cPleth"></canvas>
+        <div class="tapover" data-ch="pleth">Tap to connect SpO₂</div></div>
     </div>
     <div class="params">
       <div class="num hr" id="nHr"><div class="lab">HR<span class="u">bpm</span></div><div class="val">--</div></div>
@@ -537,6 +545,7 @@ function runMonitor(){
 
   const ecg=new EcgEngine();
   const FS_pps=240;          // pixels per second sweep speed feel
+  const active={ecg:false, pleth:false, co2:false};   // channels start off; tap to activate
   const captured=()=> STATE.pacerOn && STATE.pacerMa>=STATE.captureMa && STATE.rhythm!=="vfib";
   // physiologic pulse — independent of the beep toggle; pacing capture restores a pulse
   const noPulse=()=>{
@@ -546,7 +555,7 @@ function runMonitor(){
   const effRate=()=> captured()? STATE.pacerRate : (STATE.hr>0?STATE.hr:60);
   // X Series channel order: ECG II, ART, CO2, SpO2 pleth
   const waves=[
-    setupWave("cEcg",  ()=>ecg.value(), {amp:0.26,     base:0.60, color:getCss("--ecg")}),
+    setupWave("cEcg",  ()=>active.ecg?ecg.value():null, {amp:0.26, base:0.60, color:getCss("--ecg")}),
     setupWave("cArt",  ()=>artVal(),    {amp:0.64/180, base:0.82, color:getCss("--art")}),
     setupWave("cCo2",  ()=>co2Val(),    {amp:0.64/60,  base:0.82, color:getCss("--co2"), speed:.55}),
     setupWave("cPleth",()=>plethVal(),  {amp:0.42,     base:0.80, color:getCss("--spo2")})
@@ -555,6 +564,7 @@ function runMonitor(){
   // pleth synced to the (effective) pulse rate
   let plethPhase=0;
   function plethVal(){
+    if(!active.pleth) return null;          // channel not activated
     if(noPulse()||STATE.spo2<1) return 0;
     const period=60/effRate();
     const x=(plethPhase%period)/period;
@@ -578,12 +588,13 @@ function runMonitor(){
   // Capnography (mmHg), peak = EtCO2
   let co2Phase=0;
   function co2Val(){
+    if(!active.co2) return null;            // channel not activated
     if(STATE.rr<1) return 0;
     const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
-    if(x<0.18) return 0;                          // inspiratory baseline
-    if(x<0.28) return et*((x-0.18)/0.10);         // expiratory upstroke
-    if(x<0.80) return et*(0.93+0.07*((x-0.28)/0.52)); // alveolar plateau (slight rise)
-    if(x<0.86) return et*Math.max(0,1-(x-0.80)/0.06); // sharp downstroke
+    if(x<0.20) return 0;                          // inspiratory baseline
+    if(x<0.40) return et*((x-0.20)/0.20);         // gentler expiratory upstroke (phase II)
+    if(x<0.82) return et*(0.95+0.05*((x-0.40)/0.42)); // alveolar plateau (slight rise)
+    if(x<0.90) return et*Math.max(0,1-(x-0.82)/0.08); // downstroke
     return 0;
   }
 
@@ -596,21 +607,6 @@ function runMonitor(){
       g.gain.setValueAtTime(vol,beep.currentTime);
       g.gain.exponentialRampToValueAtTime(0.0001,beep.currentTime+dur);
       o.start();o.stop(beep.currentTime+dur);
-    }catch(e){}
-  }
-  // NIBP cuff sound: a steady pump-motor hum during inflation (no pulsing)
-  function cuffSound(){
-    try{
-      beep=beep||new (window.AudioContext||window.webkitAudioContext)();
-      const ctx=beep, t=ctx.currentTime, dur=NIBP_DUR;   // pump runs the whole cycle
-      const osc=ctx.createOscillator(); osc.type="sawtooth"; osc.frequency.value=88;
-      const lp=ctx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=300; lp.Q.value=4;
-      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
-      g.gain.linearRampToValueAtTime(0.05,t+0.6);       // motor spins up
-      g.gain.setValueAtTime(0.05,t+dur-1.2);
-      g.gain.linearRampToValueAtTime(0.0001,t+dur);     // motor winds down
-      osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
-      osc.start(t); osc.stop(t+dur);
     }catch(e){}
   }
   let lastBeatPhase=1;
@@ -629,7 +625,7 @@ function runMonitor(){
       ecg.step(SIM_DT); plethPhase+=SIM_DT; co2Phase+=SIM_DT; artPhase+=SIM_DT;
       // beat boundary: QRS beep (pitch tracks SpO2) + sync cardioversion markers
       const bp=ecg.beatT/ecg.beatLen;
-      if(bp<lastBeatPhase){
+      if(bp<lastBeatPhase && active.ecg){
         if(!noPulse() && STATE.rhythm!=="vfib"){
           const f=600+(STATE.spo2-90)*8;
           tone(Math.max(400,f),0.07,0.18);
@@ -645,8 +641,11 @@ function runMonitor(){
   requestAnimationFrame(frame);
 
   // numbers + alarms
-  let nibpShown=null, nibpCycling=false;
+  let nibpShown=null, nibpCycling=false, eventsPrimed=false;
   let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0;
+  // don't fire shock/NIBP events from the retained state we receive on load;
+  // re-baseline for ~2s while the initial sync settles, then arm real events.
+  setTimeout(()=>{ eventsPrimed=true; }, 2000);
 
   const NIBP_DUR=30;                 // seconds for a full measurement
   let nibpAnim=null, nibpStart=0;
@@ -661,7 +660,7 @@ function runMonitor(){
   }
   function cycleNibp(){
     if(nibpCycling) return;
-    nibpCycling=true; nibpStart=performance.now(); cuffSound();
+    nibpCycling=true; nibpStart=performance.now();
     const bar=document.getElementById("nibpBar"); bar.style.display="block";
     document.getElementById("nNibp").classList.remove("alarm");
     if(nibpAnim) clearInterval(nibpAnim);
@@ -687,17 +686,22 @@ function runMonitor(){
   }
 
   function updNums(){
-    // events that arrive via state sync
-    if((STATE.nibpSeq||0)>lastNibpSeq){ lastNibpSeq=STATE.nibpSeq; cycleNibp(); }
-    if((STATE.shockSeq||0)>lastShockSeq){ lastShockSeq=STATE.shockSeq; ecg.triggerShock(); flashShock(STATE.lastShockEnergy); }
+    // events that arrive via state sync (suppressed until initial sync settles)
+    if(!eventsPrimed){
+      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0;
+    } else {
+      if((STATE.nibpSeq||0)>lastNibpSeq){ lastNibpSeq=STATE.nibpSeq; cycleNibp(); }
+      if((STATE.shockSeq||0)>lastShockSeq){ lastShockSeq=STATE.shockSeq; ecg.triggerShock(); flashShock(STATE.lastShockEnergy); }
+    }
 
     let hrShow;
-    if(captured()) hrShow=STATE.pacerRate;
+    if(!active.ecg) hrShow="--";
+    else if(captured()) hrShow=STATE.pacerRate;
     else hrShow= STATE.rhythm==="asystole"?0 : (STATE.rhythm==="vfib"?"--":STATE.hr);
     setNum("nHr",hrShow);
-    setNum("nSpo2",STATE.pea?"--":STATE.spo2);
-    setNum("nEtco2",STATE.etco2);
-    document.getElementById("nRr").textContent=STATE.rr;
+    setNum("nSpo2", !active.pleth? "--" : (STATE.pea?"--":STATE.spo2));
+    setNum("nEtco2", active.co2? STATE.etco2 : "--");
+    document.getElementById("nRr").textContent= active.co2? STATE.rr : "--";
     document.querySelector("#bTemp .val").textContent=STATE.temp.toFixed(1);
     document.getElementById("mPatient").textContent=STATE.patient;
     renderNibp();
@@ -718,11 +722,11 @@ function runMonitor(){
       bArt.querySelector(".val").textContent = STATE.sys>0
         ? (STATE.sys+"/"+STATE.dia+" ("+Math.round((STATE.sys+2*STATE.dia)/3)+")") : "--";
     }
-    // alarms
-    alarm("nHr", (!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole");
-    alarm("nSpo2", !STATE.pea && STATE.spo2<90);
-    alarm("nEtco2", STATE.etco2<25||STATE.etco2>55);
-    const crit=(STATE.rhythm==="vfib"||STATE.rhythm==="asystole"||STATE.rhythm==="vt"||STATE.pea);
+    // alarms (only on activated channels)
+    alarm("nHr", active.ecg && ((!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole"));
+    alarm("nSpo2", active.pleth && !STATE.pea && STATE.spo2<90);
+    alarm("nEtco2", active.co2 && (STATE.etco2<25||STATE.etco2>55));
+    const crit=active.ecg && (STATE.rhythm==="vfib"||STATE.rhythm==="asystole"||STATE.rhythm==="vt"||STATE.pea);
     const banner=document.getElementById("banner");
     if(crit){banner.style.display="block";
       banner.textContent= STATE.pea?"** PEA — CHECK PULSE **":("** "+(RHYTHMS[STATE.rhythm].label).toUpperCase()+" **");}
@@ -733,6 +737,13 @@ function runMonitor(){
   function alarm(id,on){document.getElementById(id).classList.toggle("alarm",!!on);}
   // monitor-side manual NIBP cycle button (tap on the iPad)
   document.getElementById("btnNibpMon").onclick=()=>cycleNibp();
+
+  // tap a waveform to connect/activate that channel (like attaching the lead)
+  document.querySelectorAll(".tapover").forEach(ov=>{
+    ov.onclick=()=>{ active[ov.dataset.ch]=true; ov.classList.add("hidden");
+      if(beep&&beep.state==="suspended") beep.resume();   // unlock audio on iOS
+      updNums(); };
+  });
 
   // ---- device control bar: operate defib / pacer from the monitor ----
   const ENERGIES=[50,100,150,200,300,360];
