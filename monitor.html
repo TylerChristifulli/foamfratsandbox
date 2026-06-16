@@ -307,7 +307,8 @@
       <video id="camFeed" class="camfeed" autoplay playsinline muted></video>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
         <span class="camstatus" id="camStatus">waiting for camera…</span>
-        <button class="cyclebtn" id="camMute" style="margin-left:auto">🔇 Unmute</button>
+        <button class="cyclebtn" id="camFlip" style="margin-left:auto">⟳ Flip camera</button>
+        <button class="cyclebtn" id="camMute">🔇 Unmute</button>
       </div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">Open the <b>Camera</b> role on a spare phone/iPad (same room code) aimed at the scene.</div>
     </div>
@@ -811,22 +812,30 @@ function runMonitor(){
       updNums(); };
   });
 
-  // live camera streamed from THIS monitor device (front/screen-side camera)
+  // live camera streamed from THIS monitor device; Control can flip it remotely
   const monStreamer=makeStreamer();
-  let monCamStream=null;
+  let monCamStream=null, camFacing="user";
   const monPip=document.getElementById("monPip"), mCamBtn=document.getElementById("mCamBtn");
-  mCamBtn.onclick=async()=>{
-    if(monCamStream){ monCamStream.getTracks().forEach(t=>t.stop()); monCamStream=null;
-      monStreamer.stop(); monPip.style.display="none";
-      mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera"; return; }
+  async function monStartCam(){
     try{
-      monCamStream=await getFrontCamera();
+      if(monCamStream) monCamStream.getTracks().forEach(t=>t.stop());
+      monCamStream=await getCamera(camFacing);
       monPip.srcObject=monCamStream; monPip.style.display="block"; monPip.play&&monPip.play().catch(()=>{});
+      monPip.style.transform = camFacing==="user" ? "scaleX(-1)" : "none";
       mCamBtn.classList.add("on"); mCamBtn.textContent="🎥 ● LIVE";
       monStreamer.use(monCamStream);
       if(beep&&beep.state==="suspended") beep.resume();
     }catch(e){ mCamBtn.textContent="🎥 blocked"; }
-  };
+  }
+  function monStopCam(){
+    if(monCamStream){ monCamStream.getTracks().forEach(t=>t.stop()); monCamStream=null; }
+    monStreamer.stop(); monPip.style.display="none";
+    mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera";
+  }
+  mCamBtn.onclick=()=>{ monCamStream? monStopCam() : monStartCam(); };
+  // remote flip command from the Control room
+  onSignal.push(m=>{ if(m.type==="flipcam" && monCamStream){
+    camFacing = camFacing==="user" ? "environment" : "user"; monStartCam(); } });
 
   // ---- device control bar: operate defib / pacer from the monitor ----
   const ENERGIES=[50,100,150,200,300,360];
@@ -920,8 +929,8 @@ function getCss(v){return getComputedStyle(document.documentElement).getProperty
    Signaling rides the room's MQTT channel; public STUN for same-wifi direct.
    ========================================================================= */
 const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
-// front (screen-side) camera so the iPad films what it faces
-function getFrontCamera(){ return navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:true}); }
+// facing: "user" = front/screen-side camera, "environment" = rear camera
+function getCamera(facing){ return navigator.mediaDevices.getUserMedia({video:{facingMode:facing||"user"},audio:true}); }
 
 // Sender side — used by both the Monitor (its own camera) and the standalone Camera role.
 function makeStreamer(){
@@ -952,7 +961,7 @@ function runCamera(){
   const streamer=makeStreamer();
   document.getElementById("camStart").onclick=async()=>{
     try{
-      const s=await getFrontCamera();
+      const s=await getCamera("user");
       local.srcObject=s; local.play&&local.play().catch(()=>{});
       document.querySelector(".camoverlay").classList.add("hidden");
       pill.classList.add("live"); pill.textContent="streaming · room "+ROOM;
@@ -985,6 +994,7 @@ function setupCameraFeed(){      // viewer side, embedded in Control
   });
   const mute=document.getElementById("camMute");
   mute.onclick=()=>{ video.muted=!video.muted; mute.textContent=video.muted?"🔇 Unmute":"🔊 Mute"; };
+  document.getElementById("camFlip").onclick=()=>sendSignal({type:"flipcam"});  // remote-flip the monitor camera
   sendSignal({type:"viewer-join"});
   setTimeout(()=>sendSignal({type:"viewer-join"}),1500);
 }
