@@ -326,6 +326,7 @@
       <h3>Vital Signs</h3>
       <div class="field"><label>Heart Rate <b id="lHr">80</b> bpm</label><input type="range" id="sHr" min="0" max="250" value="80"></div>
       <div class="field"><label>SpO₂ <b id="lSpo2">98</b> %</label><input type="range" id="sSpo2" min="50" max="100" value="98"></div>
+      <div class="field"><label>Perfusion (pleth amplitude) <b id="lPerf">100</b> %</label><input type="range" id="sPerf" min="0" max="100" value="100"></div>
       <div class="field"><label>Resp Rate <b id="lRr">16</b> /min</label><input type="range" id="sRr" min="0" max="60" value="16"></div>
       <div class="field"><label>EtCO₂ <b id="lEtco2">38</b> mmHg</label><input type="range" id="sEtco2" min="0" max="100" value="38"></div>
       <div class="field"><label>Systolic <b id="lSys">120</b> mmHg</label><input type="range" id="sSys" min="40" max="250" value="120"></div>
@@ -410,7 +411,7 @@
 /* ---------- shared state model ---------- */
 const STATE = {
   rhythm:"sinus", hr:80, spo2:98, rr:16, etco2:38,
-  sys:120, dia:80, temp:98.6, pulse:true, pea:false, aline:false,
+  sys:120, dia:80, temp:98.6, pulse:true, pea:false, aline:false, perfusion:100,
   patient:"Adult",
   // defibrillation / cardioversion
   shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0,
@@ -640,7 +641,8 @@ function runMonitor(){
     const period=60/effRate();
     const x=(plethPhase%period)/period;
     let y=Math.exp(-Math.pow((x-0.18)/0.13,2))*1.0 + Math.exp(-Math.pow((x-0.42)/0.10,2))*0.35;
-    return Math.min(y,1.1)*(STATE.spo2/100);
+    const perf=(STATE.perfusion==null?100:STATE.perfusion)/100;   // low perfusion damps amplitude
+    return Math.min(y,1.1)*(STATE.spo2/100)*perf;
   }
 
   // ART arterial pressure (mmHg) — only when an A-line is placed
@@ -824,8 +826,7 @@ function runMonitor(){
     try{
       if(monCamStream) monCamStream.getTracks().forEach(t=>t.stop());
       monCamStream=await getCamera(camFacing);
-      monPip.srcObject=monCamStream; monPip.style.display="block"; monPip.play&&monPip.play().catch(()=>{});
-      monPip.style.transform = camFacing==="user" ? "scaleX(-1)" : "none";
+      // no on-screen preview on the monitor (only the LIVE button); feed shows on Control
       mCamBtn.classList.add("on"); mCamBtn.textContent="🎥 ● LIVE";
       monStreamer.use(monCamStream);
       if(beep&&beep.state==="suspended") beep.resume();
@@ -833,7 +834,7 @@ function runMonitor(){
   }
   function monStopCam(){
     if(monCamStream){ monCamStream.getTracks().forEach(t=>t.stop()); monCamStream=null; }
-    monStreamer.stop(); monPip.style.display="none";
+    monStreamer.stop();
     mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera";
   }
   mCamBtn.onclick=()=>{ monCamStream? monStopCam() : monStartCam(); };
@@ -1100,6 +1101,7 @@ function runControl(){
   // sliders
   const map=[["sHr","hr","lHr",1],["sSpo2","spo2","lSpo2",1],["sRr","rr","lRr",1],
     ["sEtco2","etco2","lEtco2",1],["sSys","sys","lSys",1],["sDia","dia","lDia",1],["sTemp","temp","lTemp",1],
+    ["sPerf","perfusion","lPerf",1],
     ["sPrate","pacerRate","lPrate",1],["sPma","pacerMa","lPma",1],["sCap","captureMa","lCap",1]];
   map.forEach(([sid,key,lid])=>{
     const s=document.getElementById(sid);
@@ -1116,11 +1118,11 @@ function runControl(){
   const quick=[
     ["Code: VF arrest",()=>setMany({rhythm:"vfib",spo2:60,sys:0,dia:0,etco2:12,pea:false})],
     ["Asystole",()=>setMany({rhythm:"asystole",hr:0,spo2:50,sys:0,dia:0,etco2:8})],
-    ["ROSC",()=>setMany({rhythm:"sinus_tach",hr:118,spo2:92,sys:96,dia:60,etco2:35,pea:false})],
+    ["ROSC",()=>setMany({rhythm:"sinus_tach",hr:118,spo2:92,sys:96,dia:60,etco2:35,pea:false,perfusion:65})],
     ["Hypoxia",()=>setMany({spo2:78,hr:124})],
-    ["Hypotension",()=>setMany({sys:74,dia:44})],
-    ["Sepsis",()=>setMany({rhythm:"sinus_tach",hr:122,spo2:91,sys:84,dia:50,temp:102.0,rr:26})],
-    ["Reset normal",()=>setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,pea:false})]
+    ["Hypotension",()=>setMany({sys:74,dia:44,perfusion:30})],
+    ["Sepsis",()=>setMany({rhythm:"sinus_tach",hr:122,spo2:91,sys:84,dia:50,temp:102.0,rr:26,perfusion:40})],
+    ["Reset normal",()=>setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,pea:false,perfusion:100})]
   ];
   const qb=document.getElementById("quickBtns");
   quick.forEach(([lab,fn])=>{const b=document.createElement("button");b.textContent=lab;
