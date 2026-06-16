@@ -274,7 +274,7 @@
     <div class="botbox art off" id="bArt"><div class="lab">ART<span class="u"> mmHg</span></div><div class="val">--</div></div>
     <div class="botbox p off"><div class="lab">P2<span class="u"> mmHg</span></div><div class="val">--</div></div>
     <div class="botbox p off"><div class="lab">P3<span class="u"> mmHg</span></div><div class="val">--</div></div>
-    <div class="botbox temp" id="bTemp"><div class="lab">Temp<span class="u"> °C</span></div><div class="val">--</div></div>
+    <div class="botbox temp" id="bTemp"><div class="lab">Temp<span class="u"> °F</span></div><div class="val">--</div></div>
   </div>
   <!-- device control bar (operate the defibrillator/pacer from the monitor) -->
   <div class="devbar">
@@ -326,7 +326,7 @@
       <div class="field"><label>EtCO₂ <b id="lEtco2">38</b> mmHg</label><input type="range" id="sEtco2" min="0" max="100" value="38"></div>
       <div class="field"><label>Systolic <b id="lSys">120</b> mmHg</label><input type="range" id="sSys" min="40" max="250" value="120"></div>
       <div class="field"><label>Diastolic <b id="lDia">80</b> mmHg</label><input type="range" id="sDia" min="20" max="150" value="80"></div>
-      <div class="field"><label>Temp <b id="lTemp">37.0</b> °C</label><input type="range" id="sTemp" min="30" max="42" step="0.1" value="37"></div>
+      <div class="field"><label>Temp <b id="lTemp">98.6</b> °F</label><input type="range" id="sTemp" min="86" max="108" step="0.1" value="98.6"></div>
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:4px">
         <button class="cyclebtn" id="btnNibp">🩺 Cycle NIBP</button>
         <select id="nibpAuto" class="sel">
@@ -406,7 +406,7 @@
 /* ---------- shared state model ---------- */
 const STATE = {
   rhythm:"sinus", hr:80, spo2:98, rr:16, etco2:38,
-  sys:120, dia:80, temp:37.0, pulse:true, pea:false, aline:false,
+  sys:120, dia:80, temp:98.6, pulse:true, pea:false, aline:false,
   patient:"Adult",
   // defibrillation / cardioversion
   shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0,
@@ -1044,8 +1044,8 @@ function runControl(){
     ["ROSC",()=>setMany({rhythm:"sinus_tach",hr:118,spo2:92,sys:96,dia:60,etco2:35,pea:false})],
     ["Hypoxia",()=>setMany({spo2:78,hr:124})],
     ["Hypotension",()=>setMany({sys:74,dia:44})],
-    ["Sepsis",()=>setMany({rhythm:"sinus_tach",hr:122,spo2:91,sys:84,dia:50,temp:38.9,rr:26})],
-    ["Reset normal",()=>setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:37,pea:false})]
+    ["Sepsis",()=>setMany({rhythm:"sinus_tach",hr:122,spo2:91,sys:84,dia:50,temp:102.0,rr:26})],
+    ["Reset normal",()=>setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,pea:false})]
   ];
   const qb=document.getElementById("quickBtns");
   quick.forEach(([lab,fn])=>{const b=document.createElement("button");b.textContent=lab;
