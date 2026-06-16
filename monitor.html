@@ -58,7 +58,7 @@
   .cambtn{margin-right:10px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
     border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;}
   .cambtn.on{background:#b81212;border-color:#ff6a6a;color:#fff;}
-  .monpip{position:absolute;top:36px;right:228px;width:150px;height:84px;object-fit:cover;
+  .monpip{position:absolute;bottom:124px;right:12px;width:150px;height:84px;object-fit:cover;
     border:1px solid var(--ecg);border-radius:6px;background:#000;z-index:8;display:none;transform:scaleX(-1);}
 
   .grid{flex:1;display:flex;min-height:0;background:#101010;gap:1px;}
@@ -175,6 +175,10 @@
   .camfeed.live{border-color:var(--ecg);}
   .camstatus{font-size:12px;color:var(--dim);}
   .camstatus.live{color:var(--ecg);font-weight:700;}
+  .recbtn{background:#3a0000;border:1px solid #5a0000;color:#ffb3b3;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;}
+  .recbtn.on{background:#b81212;border-color:#ff6a6a;color:#fff;}
+  .camrec{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .camrec.on{color:#ff6a6a;font-weight:700;}
 
   /* ---------- Camera role ---------- */
   #camera{display:none;height:100%;position:relative;background:#000;}
@@ -304,7 +308,12 @@
         <button class="cyclebtn" id="camFlip" style="margin-left:auto">⟳ Flip camera</button>
         <button class="cyclebtn" id="camMute">🔇 Unmute</button>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Open the <b>Camera</b> role on a spare phone/iPad (same room code) aimed at the scene.</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <button class="cyclebtn" id="camFolder">📁 Choose folder…</button>
+        <button class="recbtn" id="camRec">● Record</button>
+        <span class="camrec" id="camRecStatus"></span>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Tap <b>🎥 Camera</b> on the Monitor to stream its camera here. Recordings (video + audio) save to the folder you choose.</div>
     </div>
 
     <div class="box">
@@ -966,11 +975,11 @@ function runCamera(){
 
 function setupCameraFeed(){      // viewer side, embedded in Control
   const video=document.getElementById("camFeed"), status=document.getElementById("camStatus");
-  let pc=null;
+  let pc=null, remoteStream=null;
   function newPC(){
     const p=new RTCPeerConnection(ICE);
     p.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"camera",candidate:e.candidate.toJSON()}); };
-    p.ontrack=e=>{ video.srcObject=e.streams[0]; video.classList.add("live");
+    p.ontrack=e=>{ remoteStream=e.streams[0]; video.srcObject=remoteStream; video.classList.add("live");
       video.play&&video.play().catch(()=>{});       // ensure playback (autoplay fix)
       status.textContent="● live"; status.classList.add("live"); };
     p.onconnectionstatechange=()=>{ if(["disconnected","failed","closed"].includes(p.connectionState)){
@@ -989,6 +998,52 @@ function setupCameraFeed(){      // viewer side, embedded in Control
   const mute=document.getElementById("camMute");
   mute.onclick=()=>{ video.muted=!video.muted; mute.textContent=video.muted?"🔇 Unmute":"🔊 Mute"; };
   document.getElementById("camFlip").onclick=()=>sendSignal({type:"flipcam"});  // remote-flip the monitor camera
+
+  /* ---- local recording of the live feed (video + audio) to a chosen folder ---- */
+  let dirHandle=null, rec=null, writable=null, recChunks=null, recTimer=null;
+  const folderBtn=document.getElementById("camFolder");
+  const recBtn=document.getElementById("camRec");
+  const recStat=document.getElementById("camRecStatus");
+  const fsOK = ("showDirectoryPicker" in window);
+  if(!fsOK){ folderBtn.textContent="📁 (saves to Downloads)"; folderBtn.disabled=true; folderBtn.style.opacity=.6; }
+  folderBtn.onclick=async()=>{
+    try{ dirHandle=await window.showDirectoryPicker({mode:"readwrite"});
+      folderBtn.textContent="📁 "+dirHandle.name; }catch(e){}
+  };
+  function recName(){ return "foamfrat-sim-"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+".webm"; }
+  function pickMime(){ return MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+      ? "video/webm;codecs=vp9,opus"
+      : (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")?"video/webm;codecs=vp8,opus":"video/webm"); }
+  function recTick(t0){ recTimer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000);
+    recStat.textContent="● recording  "+String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); },500); }
+  recBtn.onclick=async()=>{
+    if(rec){ rec.stop(); return; }                       // stop
+    if(!remoteStream){ recStat.textContent="no live feed to record"; return; }
+    const name=recName(), mime=pickMime();
+    try{
+      if(dirHandle){                                     // stream straight to the chosen folder
+        const fh=await dirHandle.getFileHandle(name,{create:true});
+        writable=await fh.createWritable();
+        rec=new MediaRecorder(remoteStream,{mimeType:mime});
+        rec.ondataavailable=async e=>{ if(e.data&&e.data.size&&writable) try{await writable.write(e.data);}catch(_){} };
+        rec.onstop=async()=>{ clearInterval(recTimer); try{await writable.close();}catch(_){}
+          writable=null; rec=null; recBtn.classList.remove("on"); recBtn.textContent="● Record";
+          recStat.classList.remove("on"); recStat.textContent="saved "+name+" → "+dirHandle.name; };
+        rec.start(1000);
+      } else {                                           // fallback: download to default folder
+        recChunks=[]; rec=new MediaRecorder(remoteStream,{mimeType:mime});
+        rec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
+        rec.onstop=()=>{ clearInterval(recTimer); const blob=new Blob(recChunks,{type:mime});
+          const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+          rec=null; recBtn.classList.remove("on"); recBtn.textContent="● Record";
+          recStat.classList.remove("on"); recStat.textContent="downloaded "+name; };
+        rec.start();
+      }
+      recBtn.classList.add("on"); recBtn.textContent="■ Stop";
+      recStat.classList.add("on"); recTick(Date.now());
+    }catch(e){ recStat.textContent="record error: "+(e.message||e.name||e); }
+  };
+
   sendSignal({type:"viewer-join"});
   setTimeout(()=>sendSignal({type:"viewer-join"}),1500);
 }
