@@ -230,6 +230,7 @@
     <span class="dot" id="mDot"></span>
     <span class="pt" id="mPatient">Adult</span>
     <span class="room">Room <span id="mRoom"></span></span>
+    <button class="cambtn" id="mFull">⛶ Full</button>
     <button class="cambtn" id="mCamBtn">🎥 Camera</button>
     <span class="batt">100%</span>
     <span class="clock" id="mClock">00:00:00</span>
@@ -836,6 +837,14 @@ function runMonitor(){
     mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera";
   }
   mCamBtn.onclick=()=>{ monCamStream? monStopCam() : monStartCam(); };
+
+  // fullscreen toggle (works on desktop & iPad Safari that support the Fullscreen API)
+  document.getElementById("mFull").onclick=()=>{
+    const el=document.documentElement, d=document;
+    const fsEl=d.fullscreenElement||d.webkitFullscreenElement;
+    if(!fsEl){ (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); }
+    else{ (d.exitFullscreen||d.webkitExitFullscreen||function(){}).call(d); }
+  };
   // remote flip command from the Control room
   onSignal.push(m=>{ if(m.type==="flipcam" && monCamStream){
     camFacing = camFacing==="user" ? "environment" : "user"; monStartCam(); } });
@@ -975,19 +984,26 @@ function runCamera(){
 
 function setupCameraFeed(){      // viewer side, embedded in Control
   const video=document.getElementById("camFeed"), status=document.getElementById("camStatus");
-  let pc=null, remoteStream=null;
+  let pc=null, remoteStream=null, connected=false;
   function newPC(){
     const p=new RTCPeerConnection(ICE);
     p.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"camera",candidate:e.candidate.toJSON()}); };
     p.ontrack=e=>{ remoteStream=e.streams[0]; video.srcObject=remoteStream; video.classList.add("live");
       video.play&&video.play().catch(()=>{});       // ensure playback (autoplay fix)
-      status.textContent="● live"; status.classList.add("live"); };
-    p.onconnectionstatechange=()=>{ if(["disconnected","failed","closed"].includes(p.connectionState)){
-      video.classList.remove("live"); status.classList.remove("live"); status.textContent="camera disconnected"; } };
+      connected=true; status.textContent="● live"; status.classList.add("live"); };
+    p.onconnectionstatechange=()=>{
+      if(p.connectionState==="connected"){ connected=true; }
+      if(["disconnected","failed","closed"].includes(p.connectionState)){
+        connected=false; video.classList.remove("live"); status.classList.remove("live");
+        status.textContent="reconnecting…"; }
+    };
     return p;
   }
+  // self-healing: keep asking the monitor to (re)offer until we're connected
+  setInterval(()=>{ if(!connected) sendSignal({type:"viewer-join"}); }, 4000);
   onSignal.push(async m=>{
     if(m.type==="offer"){
+      if(pc) try{pc.close();}catch(_){}
       pc=newPC();
       try{ await pc.setRemoteDescription(m.sdp);
         const a=await pc.createAnswer(); await pc.setLocalDescription(a);
@@ -1010,30 +1026,40 @@ function setupCameraFeed(){      // viewer side, embedded in Control
     try{ dirHandle=await window.showDirectoryPicker({mode:"readwrite"});
       folderBtn.textContent="📁 "+dirHandle.name; }catch(e){}
   };
-  function recName(){ return "foamfrat-sim-"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+".webm"; }
-  function pickMime(){ return MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-      ? "video/webm;codecs=vp9,opus"
-      : (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")?"video/webm;codecs=vp8,opus":"video/webm"); }
+  function recName(ext){ return "foamfrat-sim-"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+"."+ext; }
+  function pickFormat(){   // prefer MP4 (H.264/AAC); fall back to WebM if unsupported
+    const cands=[
+      {m:"video/mp4;codecs=avc1.42E01E,mp4a.40.2", ext:"mp4"},
+      {m:"video/mp4;codecs=avc1,mp4a",            ext:"mp4"},
+      {m:"video/mp4",                              ext:"mp4"},
+      {m:"video/webm;codecs=vp9,opus",             ext:"webm"},
+      {m:"video/webm;codecs=vp8,opus",             ext:"webm"},
+      {m:"video/webm",                             ext:"webm"}
+    ];
+    for(const c of cands){ try{ if(MediaRecorder.isTypeSupported(c.m)) return c; }catch(_){} }
+    return {m:"", ext:"webm"};
+  }
   function recTick(t0){ recTimer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000);
     recStat.textContent="● recording  "+String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); },500); }
   recBtn.onclick=async()=>{
     if(rec){ rec.stop(); return; }                       // stop
     if(!remoteStream){ recStat.textContent="no live feed to record"; return; }
-    const name=recName(), mime=pickMime();
+    const fmt=pickFormat(), name=recName(fmt.ext), mime=fmt.m;
+    const mkRec=()=> mime ? new MediaRecorder(remoteStream,{mimeType:mime}) : new MediaRecorder(remoteStream);
     try{
       if(dirHandle){                                     // stream straight to the chosen folder
         const fh=await dirHandle.getFileHandle(name,{create:true});
         writable=await fh.createWritable();
-        rec=new MediaRecorder(remoteStream,{mimeType:mime});
+        rec=mkRec();
         rec.ondataavailable=async e=>{ if(e.data&&e.data.size&&writable) try{await writable.write(e.data);}catch(_){} };
         rec.onstop=async()=>{ clearInterval(recTimer); try{await writable.close();}catch(_){}
           writable=null; rec=null; recBtn.classList.remove("on"); recBtn.textContent="● Record";
           recStat.classList.remove("on"); recStat.textContent="saved "+name+" → "+dirHandle.name; };
         rec.start(1000);
       } else {                                           // fallback: download to default folder
-        recChunks=[]; rec=new MediaRecorder(remoteStream,{mimeType:mime});
+        recChunks=[]; rec=mkRec();
         rec.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
-        rec.onstop=()=>{ clearInterval(recTimer); const blob=new Blob(recChunks,{type:mime});
+        rec.onstop=()=>{ clearInterval(recTimer); const blob=new Blob(recChunks,{type:mime||"video/webm"});
           const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
           rec=null; recBtn.classList.remove("on"); recBtn.textContent="● Record";
           recStat.classList.remove("on"); recStat.textContent="downloaded "+name; };
