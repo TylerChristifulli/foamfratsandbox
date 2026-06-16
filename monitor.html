@@ -55,6 +55,11 @@
   .topbar .clock{padding:0 12px;font-variant-numeric:tabular-nums;color:#fff;}
   .dot{width:8px;height:8px;border-radius:50%;background:#444;margin:0 8px;}
   .dot.on{background:var(--ecg);box-shadow:0 0 6px var(--ecg);}
+  .cambtn{margin-right:10px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
+    border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;}
+  .cambtn.on{background:#b81212;border-color:#ff6a6a;color:#fff;}
+  .monpip{position:absolute;top:36px;right:228px;width:150px;height:84px;object-fit:cover;
+    border:1px solid var(--ecg);border-radius:6px;background:#000;z-index:8;display:none;transform:scaleX(-1);}
 
   .grid{flex:1;display:flex;min-height:0;background:#101010;gap:1px;}
   .waves{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0;min-height:0;}
@@ -227,9 +232,11 @@
     <span class="dot" id="mDot"></span>
     <span class="pt" id="mPatient">Adult</span>
     <span class="room">Room <span id="mRoom"></span></span>
+    <button class="cambtn" id="mCamBtn">🎥 Camera</button>
     <span class="batt">100%</span>
     <span class="clock" id="mClock">00:00:00</span>
   </div>
+  <video id="monPip" class="monpip" autoplay playsinline muted></video>
   <div class="grid">
     <div class="waves">
       <!-- ECG II -->
@@ -804,6 +811,23 @@ function runMonitor(){
       updNums(); };
   });
 
+  // live camera streamed from THIS monitor device (front/screen-side camera)
+  const monStreamer=makeStreamer();
+  let monCamStream=null;
+  const monPip=document.getElementById("monPip"), mCamBtn=document.getElementById("mCamBtn");
+  mCamBtn.onclick=async()=>{
+    if(monCamStream){ monCamStream.getTracks().forEach(t=>t.stop()); monCamStream=null;
+      monStreamer.stop(); monPip.style.display="none";
+      mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera"; return; }
+    try{
+      monCamStream=await getFrontCamera();
+      monPip.srcObject=monCamStream; monPip.style.display="block"; monPip.play&&monPip.play().catch(()=>{});
+      mCamBtn.classList.add("on"); mCamBtn.textContent="🎥 ● LIVE";
+      monStreamer.use(monCamStream);
+      if(beep&&beep.state==="suspended") beep.resume();
+    }catch(e){ mCamBtn.textContent="🎥 blocked"; }
+  };
+
   // ---- device control bar: operate defib / pacer from the monitor ----
   const ENERGIES=[50,100,150,200,300,360];
   function devApply(){ broadcast(); updNums(); }   // push to peers + refresh this screen
@@ -896,37 +920,45 @@ function getCss(v){return getComputedStyle(document.documentElement).getProperty
    Signaling rides the room's MQTT channel; public STUN for same-wifi direct.
    ========================================================================= */
 const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
+// front (screen-side) camera so the iPad films what it faces
+function getFrontCamera(){ return navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:true}); }
+
+// Sender side — used by both the Monitor (its own camera) and the standalone Camera role.
+function makeStreamer(){
+  let pc=null, stream=null;
+  async function offer(){
+    if(!stream) return;
+    if(pc) try{pc.close();}catch(_){}
+    pc=new RTCPeerConnection(ICE);
+    pc.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"viewer",candidate:e.candidate.toJSON()}); };
+    stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+    const o=await pc.createOffer(); await pc.setLocalDescription(o);
+    sendSignal({type:"offer",sdp:pc.localDescription});
+  }
+  onSignal.push(async m=>{
+    if(m.type==="viewer-join") offer();
+    else if(m.type==="answer" && pc){ try{await pc.setRemoteDescription(m.sdp);}catch(_){} }
+    else if(m.type==="ice" && m.target==="camera" && pc){ try{await pc.addIceCandidate(m.candidate);}catch(_){} }
+  });
+  return { use(s){ stream=s; sendSignal({type:"camera-online"}); },
+           stop(){ if(pc) try{pc.close();}catch(_){} pc=null; stream=null; } };
+}
 
 function runCamera(){
   document.getElementById("chooser").style.display="none";
   document.getElementById("camera").style.display="block";
   document.getElementById("camRoom").textContent=ROOM;
   const local=document.getElementById("camLocal"), pill=document.getElementById("camPill");
-  let stream=null, pc=null;
-  async function startCam(){
+  const streamer=makeStreamer();
+  document.getElementById("camStart").onclick=async()=>{
     try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:true});
-      local.srcObject=stream;
+      const s=await getFrontCamera();
+      local.srcObject=s; local.play&&local.play().catch(()=>{});
       document.querySelector(".camoverlay").classList.add("hidden");
       pill.classList.add("live"); pill.textContent="streaming · room "+ROOM;
-      sendSignal({type:"camera-online"});
+      streamer.use(s);
     }catch(e){ pill.textContent="camera blocked: "+(e.message||e.name); }
-  }
-  document.getElementById("camStart").onclick=startCam;
-  async function makeOffer(){
-    if(!stream) return;
-    if(pc) try{pc.close();}catch(_){}
-    pc=new RTCPeerConnection(ICE);
-    pc.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"viewer",candidate:e.candidate.toJSON()}); };
-    stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-    const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-    sendSignal({type:"offer",sdp:pc.localDescription});
-  }
-  onSignal.push(async m=>{
-    if(m.type==="viewer-join") makeOffer();
-    else if(m.type==="answer" && pc){ try{await pc.setRemoteDescription(m.sdp);}catch(_){} }
-    else if(m.type==="ice" && m.target==="camera" && pc){ try{await pc.addIceCandidate(m.candidate);}catch(_){} }
-  });
+  };
 }
 
 function setupCameraFeed(){      // viewer side, embedded in Control
@@ -936,6 +968,7 @@ function setupCameraFeed(){      // viewer side, embedded in Control
     const p=new RTCPeerConnection(ICE);
     p.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"camera",candidate:e.candidate.toJSON()}); };
     p.ontrack=e=>{ video.srcObject=e.streams[0]; video.classList.add("live");
+      video.play&&video.play().catch(()=>{});       // ensure playback (autoplay fix)
       status.textContent="● live"; status.classList.add("live"); };
     p.onconnectionstatechange=()=>{ if(["disconnected","failed","closed"].includes(p.connectionState)){
       video.classList.remove("live"); status.classList.remove("live"); status.textContent="camera disconnected"; } };
