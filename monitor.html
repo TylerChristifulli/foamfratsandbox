@@ -941,7 +941,14 @@ function getCss(v){return getComputedStyle(document.documentElement).getProperty
    WEBRTC LIVE CAMERA — camera role streams to the Control viewer.
    Signaling rides the room's MQTT channel; public STUN for same-wifi direct.
    ========================================================================= */
-const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
+// STUN for direct connections + public TURN relays so it still connects on
+// locked-down wifi (AP isolation) or across different networks.
+const ICE={iceServers:[
+  {urls:"stun:stun.l.google.com:19302"},
+  {urls:"turn:openrelay.metered.ca:80", username:"openrelayproject", credential:"openrelayproject"},
+  {urls:"turn:openrelay.metered.ca:443", username:"openrelayproject", credential:"openrelayproject"},
+  {urls:"turn:openrelay.metered.ca:443?transport=tcp", username:"openrelayproject", credential:"openrelayproject"}
+]};
 // facing: "user" = front/screen-side camera, "environment" = rear camera
 function getCamera(facing){ return navigator.mediaDevices.getUserMedia({video:{facingMode:facing||"user"},audio:true}); }
 
@@ -985,23 +992,27 @@ function runCamera(){
 
 function setupCameraFeed(){      // viewer side, embedded in Control
   const video=document.getElementById("camFeed"), status=document.getElementById("camStatus");
-  let pc=null, remoteStream=null, connected=false;
+  let pc=null, remoteStream=null;
   function newPC(){
     const p=new RTCPeerConnection(ICE);
     p.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"camera",candidate:e.candidate.toJSON()}); };
     p.ontrack=e=>{ remoteStream=e.streams[0]; video.srcObject=remoteStream; video.classList.add("live");
       video.play&&video.play().catch(()=>{});       // ensure playback (autoplay fix)
-      connected=true; status.textContent="● live"; status.classList.add("live"); };
+      status.textContent="● live"; status.classList.add("live"); };
     p.onconnectionstatechange=()=>{
-      if(p.connectionState==="connected"){ connected=true; }
-      if(["disconnected","failed","closed"].includes(p.connectionState)){
-        connected=false; video.classList.remove("live"); status.classList.remove("live");
-        status.textContent="reconnecting…"; }
+      const st=p.connectionState;
+      if(st==="connected"){ status.textContent="● live"; status.classList.add("live"); }
+      else if(st==="disconnected"){ status.classList.remove("live"); status.textContent="reconnecting…"; }
+      else if(st==="failed"||st==="closed"){ status.classList.remove("live"); video.classList.remove("live");
+        status.textContent="reconnecting…"; if(st==="failed") requestFeed(); }
     };
     return p;
   }
-  // self-healing: keep asking the monitor to (re)offer until we're connected
-  setInterval(()=>{ if(!connected) sendSignal({type:"viewer-join"}); }, 4000);
+  function requestFeed(){ sendSignal({type:"viewer-join"}); }
+  // gentle reconnect: only re-request when there's NO connection in progress,
+  // so we never interrupt an ICE handshake that's still completing.
+  setInterval(()=>{ const st=pc&&pc.connectionState;
+    if(!pc || st==="failed" || st==="closed") requestFeed(); }, 8000);
   onSignal.push(async m=>{
     if(m.type==="offer"){
       if(pc) try{pc.close();}catch(_){}
