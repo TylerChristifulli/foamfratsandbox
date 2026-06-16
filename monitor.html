@@ -166,6 +166,24 @@
   .shockbtn{background:linear-gradient(180deg,#ff5a4d,#d61f12);border:1px solid #ff7a6e;color:#fff;
     font-weight:800;font-size:15px;border-radius:10px;padding:12px 20px;box-shadow:0 3px 0 #7d0e06,0 0 18px rgba(214,31,18,.5);}
   .shockbtn:active{transform:translateY(3px);box-shadow:0 0 0 #7d0e06,0 0 18px rgba(214,31,18,.5);}
+  .camfeed{width:100%;aspect-ratio:16/9;background:#000;border:1px solid #2e2e2e;border-radius:10px;object-fit:cover;}
+  .camfeed.live{border-color:var(--ecg);}
+  .camstatus{font-size:12px;color:var(--dim);}
+  .camstatus.live{color:var(--ecg);font-weight:700;}
+
+  /* ---------- Camera role ---------- */
+  #camera{display:none;height:100%;position:relative;background:#000;}
+  #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .camoverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;text-align:center;background:rgba(0,0,0,.45);padding:24px;}
+  .camoverlay.hidden{background:transparent;pointer-events:none;}
+  .camoverlay.hidden .camtitle,.camoverlay.hidden .camsub,.camoverlay.hidden #camStart{display:none;}
+  .camtitle{font-size:24px;font-weight:700;} .camtitle span{color:var(--ecg);}
+  .camsub{color:#ccc;} .camsub b{color:var(--ecg);letter-spacing:2px;}
+  .campill{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.6);color:#fff;
+    font-size:12px;font-weight:700;padding:6px 10px;border-radius:20px;}
+  .campill.live{background:#b81212;}
+  .campill.live::before{content:"● LIVE ";}
 </style>
 </head>
 <body>
@@ -191,6 +209,12 @@
       <h2>Control</h2>
       <small>Run this on your laptop. Drive vitals live and record scenarios.</small>
       <button class="btn alt" data-role="control">Open Control</button>
+    </div>
+    <div class="card">
+      <div class="ic">🎥</div>
+      <h2>Camera</h2>
+      <small>Run on a spare phone/iPad aimed at the scene. Streams live video to Control.</small>
+      <button class="btn alt" data-role="camera">Open Camera</button>
     </div>
   </div>
   <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
@@ -272,6 +296,16 @@
   </div>
   <div class="cwrap">
     <div class="box">
+      <h3>Live Camera</h3>
+      <video id="camFeed" class="camfeed" autoplay playsinline muted></video>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <span class="camstatus" id="camStatus">waiting for camera…</span>
+        <button class="cyclebtn" id="camMute" style="margin-left:auto">🔇 Unmute</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Open the <b>Camera</b> role on a spare phone/iPad (same room code) aimed at the scene.</div>
+    </div>
+
+    <div class="box">
       <h3>Rhythm</h3>
       <div class="rhythms" id="rhythmBtns"></div>
     </div>
@@ -342,6 +376,17 @@
   </div>
 </div>
 
+<!-- ============ CAMERA ============ -->
+<div id="camera">
+  <video id="camLocal" autoplay playsinline muted></video>
+  <div class="camoverlay">
+    <div class="camtitle">FoamFrat <span>Camera</span></div>
+    <div class="camsub">Room <b id="camRoom"></b></div>
+    <button class="btn" id="camStart">Start camera</button>
+    <div class="campill" id="camPill">tap “Start camera” and allow access</div>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    FoamFrat Sim Monitor — single file. Roles: monitor (iPad) / control (laptop)
@@ -371,8 +416,10 @@ let ROLE=params.get("role")||null;
    TRANSPORT
    ========================================================================= */
 const TOPIC=()=>`foamfrat/simmon/${ROOM}/state`;
+const RTOPIC=()=>`foamfrat/simmon/${ROOM}/rtc`;     // WebRTC signaling channel
+const CLIENTID=Math.random().toString(16).slice(2,10);
 let mqttClient=null, bc=null, connected=false;
-const onState=[];
+const onState=[], onSignal=[];
 
 function broadcast(){
   const payload=JSON.stringify(STATE);
@@ -380,6 +427,11 @@ function broadcast(){
   try{ if(bc) bc.postMessage(payload); }catch(e){}
 }
 function applyState(obj){ Object.assign(STATE,obj); onState.forEach(f=>f()); }
+// WebRTC signaling: small JSON messages (offer/answer/ice) tagged with sender id
+function sendSignal(obj){
+  obj.from=CLIENTID;
+  try{ if(mqttClient&&mqttClient.connected) mqttClient.publish(RTOPIC(),JSON.stringify(obj)); }catch(e){}
+}
 
 function connect(){
   // BroadcastChannel = instant same-device sync (two tabs/windows)
@@ -392,12 +444,19 @@ function connect(){
        reconnectPeriod:2000,connectTimeout:8000});
     mqttClient.on("connect",()=>{
       connected=true; setConn(true);
-      mqttClient.subscribe(TOPIC());
+      mqttClient.subscribe(TOPIC()); mqttClient.subscribe(RTOPIC());
       if(ROLE==="control") broadcast();           // push current state to monitor
     });
     mqttClient.on("reconnect",()=>setConn(false));
     mqttClient.on("close",()=>{connected=false;setConn(false);});
-    mqttClient.on("message",(t,msg)=>{ try{applyState(JSON.parse(msg.toString()));}catch(_){}});
+    mqttClient.on("message",(t,msg)=>{
+      const topic=t.toString();
+      if(topic===RTOPIC()){
+        try{ const m=JSON.parse(msg.toString()); if(m.from!==CLIENTID) onSignal.forEach(f=>f(m)); }catch(_){}
+      } else {
+        try{ applyState(JSON.parse(msg.toString())); }catch(_){}
+      }
+    });
   }catch(e){ setConn(false); }
 }
 function setConn(ok){
@@ -833,6 +892,71 @@ function runMonitor(){
 function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 
 /* =========================================================================
+   WEBRTC LIVE CAMERA — camera role streams to the Control viewer.
+   Signaling rides the room's MQTT channel; public STUN for same-wifi direct.
+   ========================================================================= */
+const ICE={iceServers:[{urls:"stun:stun.l.google.com:19302"}]};
+
+function runCamera(){
+  document.getElementById("chooser").style.display="none";
+  document.getElementById("camera").style.display="block";
+  document.getElementById("camRoom").textContent=ROOM;
+  const local=document.getElementById("camLocal"), pill=document.getElementById("camPill");
+  let stream=null, pc=null;
+  async function startCam(){
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:true});
+      local.srcObject=stream;
+      document.querySelector(".camoverlay").classList.add("hidden");
+      pill.classList.add("live"); pill.textContent="streaming · room "+ROOM;
+      sendSignal({type:"camera-online"});
+    }catch(e){ pill.textContent="camera blocked: "+(e.message||e.name); }
+  }
+  document.getElementById("camStart").onclick=startCam;
+  async function makeOffer(){
+    if(!stream) return;
+    if(pc) try{pc.close();}catch(_){}
+    pc=new RTCPeerConnection(ICE);
+    pc.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"viewer",candidate:e.candidate.toJSON()}); };
+    stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+    const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+    sendSignal({type:"offer",sdp:pc.localDescription});
+  }
+  onSignal.push(async m=>{
+    if(m.type==="viewer-join") makeOffer();
+    else if(m.type==="answer" && pc){ try{await pc.setRemoteDescription(m.sdp);}catch(_){} }
+    else if(m.type==="ice" && m.target==="camera" && pc){ try{await pc.addIceCandidate(m.candidate);}catch(_){} }
+  });
+}
+
+function setupCameraFeed(){      // viewer side, embedded in Control
+  const video=document.getElementById("camFeed"), status=document.getElementById("camStatus");
+  let pc=null;
+  function newPC(){
+    const p=new RTCPeerConnection(ICE);
+    p.onicecandidate=e=>{ if(e.candidate) sendSignal({type:"ice",target:"camera",candidate:e.candidate.toJSON()}); };
+    p.ontrack=e=>{ video.srcObject=e.streams[0]; video.classList.add("live");
+      status.textContent="● live"; status.classList.add("live"); };
+    p.onconnectionstatechange=()=>{ if(["disconnected","failed","closed"].includes(p.connectionState)){
+      video.classList.remove("live"); status.classList.remove("live"); status.textContent="camera disconnected"; } };
+    return p;
+  }
+  onSignal.push(async m=>{
+    if(m.type==="offer"){
+      pc=newPC();
+      try{ await pc.setRemoteDescription(m.sdp);
+        const a=await pc.createAnswer(); await pc.setLocalDescription(a);
+        sendSignal({type:"answer",sdp:pc.localDescription}); }catch(_){}
+    } else if(m.type==="camera-online"){ sendSignal({type:"viewer-join"}); }
+    else if(m.type==="ice" && m.target==="viewer" && pc){ try{await pc.addIceCandidate(m.candidate);}catch(_){} }
+  });
+  const mute=document.getElementById("camMute");
+  mute.onclick=()=>{ video.muted=!video.muted; mute.textContent=video.muted?"🔇 Unmute":"🔊 Mute"; };
+  sendSignal({type:"viewer-join"});
+  setTimeout(()=>sendSignal({type:"viewer-join"}),1500);
+}
+
+/* =========================================================================
    CONTROL UI
    ========================================================================= */
 function runControl(){
@@ -964,6 +1088,7 @@ function runControl(){
     document.getElementById("btnRec").textContent="● Record";logRender();};
 
   syncSliders();
+  setupCameraFeed();           // live video panel (viewer side)
   setInterval(broadcast,4000); // heartbeat so late-joining monitor catches up
 }
 
@@ -973,7 +1098,9 @@ function runControl(){
 function start(role){
   ROLE=role; localStorage.setItem("ffroom",ROOM);
   connect();
-  if(role==="monitor") runMonitor(); else runControl();
+  if(role==="monitor") runMonitor();
+  else if(role==="camera") runCamera();
+  else runControl();
 }
 (function init(){
   const inp=document.getElementById("roomInput"); inp.value=ROOM;
