@@ -166,6 +166,10 @@
   .connpill.on{color:var(--ecg);}
   .cyclebtn{background:#13243a;border:1px solid #25496e;color:#bfe2ff;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;}
   .sel{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;padding:8px;font-size:13px;}
+  .numin{width:66px;background:#1a1a1a;border:1px solid #2e2e2e;color:#fff;border-radius:6px;padding:6px;font-size:13px;}
+  .trendrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .trendrow label{font-size:13px;color:var(--dim);}
+  .startbtn{background:#0c2a12;border:1px solid #194d24;color:#b6f5c4;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;}
   .energy{display:flex;flex-wrap:wrap;gap:6px;}
   .energy button{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;padding:7px 9px;font-size:12.5px;}
   .energy button.active{background:#ffd60a;color:#1a1400;border-color:#ffd60a;font-weight:700;}
@@ -300,7 +304,8 @@
     <img class="brandlogo" src="foamfrat-logo.png" alt="" onerror="this.style.display='none'">
     <b>FOAMfrat Control Room</b>
     <span>Room <span class="room" id="cRoom"></span></span>
-    <span class="connpill" id="cConn">connecting…</span>
+    <button class="cyclebtn" id="resetAll" style="margin-left:auto">↺ Reset for new group</button>
+    <span class="connpill" id="cConn" style="margin-left:0">connecting…</span>
   </div>
   <div class="cwrap">
     <div class="box">
@@ -345,6 +350,27 @@
         </select>
       </div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">NIBP shows on the monitor only when the cuff cycles. The arterial line (if placed) is continuous.</div>
+    </div>
+
+    <div class="box">
+      <h3>Trend Over Time</h3>
+      <div class="trendrow">
+        <select id="rampParam" class="sel">
+          <option value="spo2">SpO₂</option>
+          <option value="hr">Heart Rate</option>
+          <option value="rr">Resp Rate</option>
+          <option value="etco2">EtCO₂</option>
+          <option value="sys">Systolic</option>
+          <option value="dia">Diastolic</option>
+          <option value="temp">Temp</option>
+          <option value="perfusion">Perfusion</option>
+        </select>
+        <label>to <input id="rampTarget" type="number" class="numin" value="80"></label>
+        <label>over <input id="rampSecs" type="number" class="numin" value="10"> s</label>
+        <button class="startbtn" id="rampStart">▶ Start trend</button>
+        <button id="rampStop">■ Stop all</button>
+      </div>
+      <div class="log" id="rampLog">No active trends.</div>
     </div>
 
     <div class="box">
@@ -1142,6 +1168,7 @@ function runControl(){
     b.onclick=()=>{fn();push(lab);};qb.appendChild(b);});
   function setMany(o){Object.assign(STATE,o);
     [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===STATE.rhythm));
+    document.getElementById("swPulse").classList.toggle("on",STATE.pulse);
     document.getElementById("swPea").classList.toggle("on",STATE.pea);
     document.getElementById("swAline").classList.toggle("on",STATE.aline);
     document.getElementById("swSync").classList.toggle("on",STATE.sync);
@@ -1189,6 +1216,45 @@ function runControl(){
     const min=parseInt(e.target.value);
     if(nibpTimer){clearInterval(nibpTimer);nibpTimer=null;}
     if(min>0) nibpTimer=setInterval(()=>{STATE.nibpSeq=(STATE.nibpSeq||0)+1; push("NIBP auto-cycle");}, min*60000);
+  };
+
+  /* ---- trend over time (ramp a vital to a target across N seconds) ---- */
+  const TLABEL={hr:"HR",spo2:"SpO₂",rr:"RR",etco2:"EtCO₂",sys:"Systolic",dia:"Diastolic",temp:"Temp",perfusion:"Perfusion"};
+  const ramps={}; let rampTimer=null;
+  const rampLog=document.getElementById("rampLog");
+  function rampRender(){ const ks=Object.keys(ramps);
+    rampLog.innerHTML = ks.length
+      ? ks.map(k=>{ const left=Math.max(0,Math.ceil((ramps[k].dur-(performance.now()-ramps[k].t0))/1000));
+          return `${TLABEL[k]} → ${ramps[k].target} · ${left}s left`; }).join("<br>")
+      : "No active trends."; }
+  function tickRamps(){
+    const now=performance.now(); let active=false;
+    Object.keys(ramps).forEach(k=>{ const r=ramps[k]; let p=r.dur<=0?1:(now-r.t0)/r.dur; if(p>1)p=1;
+      let v=r.start+(r.target-r.start)*p; v= k==="temp"? Math.round(v*10)/10 : Math.round(v);
+      STATE[k]=v; if(p>=1) delete ramps[k]; else active=true; });
+    syncSliders(); broadcast(); rampRender();
+    if(!active && !Object.keys(ramps).length){ clearInterval(rampTimer); rampTimer=null; }
+  }
+  function clearTrends(){ for(const k in ramps) delete ramps[k]; if(rampTimer){clearInterval(rampTimer);rampTimer=null;} rampRender(); }
+  document.getElementById("rampStart").onclick=()=>{
+    const k=document.getElementById("rampParam").value;
+    const target=parseFloat(document.getElementById("rampTarget").value);
+    const secs=Math.max(0.5, parseFloat(document.getElementById("rampSecs").value)||0);
+    if(isNaN(target)) return;
+    ramps[k]={start:Number(STATE[k])||0, target, t0:performance.now(), dur:secs*1000};
+    if(!rampTimer) rampTimer=setInterval(tickRamps,200);
+    rampRender(); push("trend "+TLABEL[k]+"→"+target+" /"+secs+"s");
+  };
+  document.getElementById("rampStop").onclick=clearTrends;
+
+  /* ---- reset for a new sim group ---- */
+  document.getElementById("resetAll").onclick=()=>{
+    clearTrends();
+    if(nibpTimer){clearInterval(nibpTimer);nibpTimer=null;} document.getElementById("nibpAuto").value="0";
+    setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,perfusion:100,
+      pulse:true,pea:false,aline:false,sync:false,autoConvert:true,
+      pacerOn:false,pacerRate:70,pacerMa:0,captureMa:60,shockEnergy:200});
+    push("reset for new group");
   };
 
   /* ---- scenario recorder ---- */
