@@ -376,7 +376,7 @@
         </label>
         <button class="startbtn" id="acq12">📈 Acquire 12-Lead</button>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Set a STEMI rhythm + a site, then acquire — the 12-lead shows ST elevation in the matching leads. Pops up on the monitor.</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Pick a STEMI site (or None for a normal 12-lead), then Acquire — the 12-lead shows ST elevation in the matching leads and pops up on the monitor. Works with any underlying rhythm.</div>
     </div>
 
     <div class="box">
@@ -1017,8 +1017,14 @@ const STEMI_ST={
   inferior:{II:0.48,III:0.55,aVF:0.46,I:-0.22,aVL:-0.26},
   lateral:{I:0.38,aVL:0.40,V5:0.38,V6:0.34,III:-0.20,aVF:-0.16}
 };
+function stemiSiteEff(){   // the site drives the 12-lead; STEMI rhythm w/o a site defaults to anterior
+  let s=STATE.stemiSite;
+  if((!s||s==="none") && STATE.rhythm==="stemi") s="anterior";
+  return (s&&s!=="none")? s : null;
+}
 function leadST(lead){
-  if(STATE.rhythm==="stemi" && STATE.stemiSite && STATE.stemiSite!=="none") return (STEMI_ST[STATE.stemiSite]||{})[lead]||0;
+  const s=stemiSiteEff();
+  if(s) return (STEMI_ST[s]||{})[lead]||0;
   if(STATE.rhythm==="ischemia") return ({I:-0.08,II:-0.10,aVL:-0.08,V4:-0.12,V5:-0.12,V6:-0.10})[lead]||0;
   return 0;
 }
@@ -1048,7 +1054,7 @@ function leadValue(lead,t){
 function renderTwelveLead(){
   const ov=document.getElementById("twelve"); ov.classList.add("show");
   let lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus";
-  if(STATE.rhythm==="stemi"&&STATE.stemiSite&&STATE.stemiSite!=="none") lab+=" — "+STATE.stemiSite.toUpperCase()+" STEMI";
+  const sEff=stemiSiteEff(); if(sEff) lab+=" — "+sEff.toUpperCase()+" STEMI";
   document.getElementById("tvInfo").textContent=new Date().toLocaleString()+"   HR "+(STATE.rhythm==="asystole"?0:STATE.hr)+"   "+lab;
   const cv=document.getElementById("cTwelve"), ctx=cv.getContext("2d"), dpr=devicePixelRatio;
   const r=cv.getBoundingClientRect(), W=cv.width=r.width*dpr, H=cv.height=r.height*dpr;
