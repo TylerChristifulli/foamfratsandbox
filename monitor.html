@@ -1091,11 +1091,15 @@ function renderTwelveLead(){
    ========================================================================= */
 // STUN for direct connections + public TURN relays so it still connects on
 // locked-down wifi (AP isolation) or across different networks.
+// STUN-only: relies on a direct device-to-device path, so the iPad and the
+// Control laptop MUST be on the same Wi-Fi network that allows client-to-client
+// traffic (i.e. AP/client isolation OFF). No TURN relay is configured because the
+// free public TURN servers are all defunct; add working TURN creds here later if
+// cross-network / guest-wifi support is needed.
 const ICE={iceServers:[
   {urls:"stun:stun.l.google.com:19302"},
-  {urls:"turn:openrelay.metered.ca:80", username:"openrelayproject", credential:"openrelayproject"},
-  {urls:"turn:openrelay.metered.ca:443", username:"openrelayproject", credential:"openrelayproject"},
-  {urls:"turn:openrelay.metered.ca:443?transport=tcp", username:"openrelayproject", credential:"openrelayproject"}
+  {urls:"stun:stun1.l.google.com:19302"},
+  {urls:"stun:stun2.l.google.com:19302"}
 ]};
 // facing: "user" = front/screen-side camera, "environment" = rear camera
 function getCamera(facing){ return navigator.mediaDevices.getUserMedia({video:{facingMode:facing||"user"},audio:true}); }
@@ -1159,8 +1163,16 @@ function setupCameraFeed(){      // viewer side, embedded in Control
   function requestFeed(){ sendSignal({type:"viewer-join"}); }
   // gentle reconnect: only re-request when there's NO connection in progress,
   // so we never interrupt an ICE handshake that's still completing.
+  let misses=0;
   setInterval(()=>{ const st=pc&&pc.connectionState;
-    if(!pc || st==="failed" || st==="closed") requestFeed(); }, 8000);
+    if(st==="connected"){ misses=0; return; }
+    if(!pc || st==="failed" || st==="closed"){
+      requestFeed(); misses++;
+      // STUN-only build: a stuck connection almost always means the network is
+      // blocking the direct path. Tell the user instead of spinning silently.
+      if(misses>=2 && !status.classList.contains("live"))
+        status.textContent="can't reach the iPad — make sure both are on the SAME Wi-Fi (not a guest network) and the 🎥 button on the iPad is LIVE";
+    } }, 8000);
   onSignal.push(async m=>{
     if(m.type==="offer"){
       if(pc) try{pc.close();}catch(_){}
