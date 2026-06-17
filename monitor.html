@@ -185,6 +185,15 @@
   .camrec{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;}
   .camrec.on{color:#ff6a6a;font-weight:700;}
 
+  /* ---------- 12-lead snapshot ---------- */
+  .twelve{display:none;position:fixed;inset:0;background:#fff;z-index:60;flex-direction:column;}
+  .twelve.show{display:flex;}
+  .tvhead{display:flex;align-items:center;gap:14px;padding:8px 14px;background:#111;color:#fff;font-size:14px;}
+  .tvhead #tvInfo{color:#bbb;font-size:12px;}
+  .tvhead #tvClose{margin-left:auto;background:#b81212;border:none;color:#fff;border-radius:8px;
+    padding:8px 14px;font-size:13px;font-weight:700;}
+  .twelve canvas{flex:1;width:100%;min-height:0;display:block;background:#fff;}
+
   /* ---------- Camera role ---------- */
   #camera{display:none;height:100%;position:relative;background:#000;}
   #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
@@ -235,6 +244,7 @@
     <span class="dot" id="mDot"></span>
     <span class="pt" id="mPatient">Adult</span>
     <span class="room">Room <span id="mRoom"></span></span>
+    <button class="cambtn" id="m12Lead">12-Lead</button>
     <button class="cambtn" id="mFull">⛶ Full</button>
     <button class="cambtn" id="mCamBtn">🎥 Camera</button>
     <span class="batt">100%</span>
@@ -353,6 +363,23 @@
     </div>
 
     <div class="box">
+      <h3>12-Lead ECG</h3>
+      <div class="trendrow">
+        <label>STEMI site
+          <select id="stemiSite" class="sel">
+            <option value="none">None</option>
+            <option value="anterior">Anterior (V2–V4)</option>
+            <option value="septal">Septal (V1–V2)</option>
+            <option value="inferior">Inferior (II,III,aVF)</option>
+            <option value="lateral">Lateral (I,aVL,V5,V6)</option>
+          </select>
+        </label>
+        <button class="startbtn" id="acq12">📈 Acquire 12-Lead</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Set a STEMI rhythm + a site, then acquire — the 12-lead shows ST elevation in the matching leads. Pops up on the monitor.</div>
+    </div>
+
+    <div class="box">
       <h3>Trend Over Time</h3>
       <div class="trendrow">
         <select id="rampParam" class="sel">
@@ -377,7 +404,7 @@
       <h3>Quick Events</h3>
       <div class="quick" id="quickBtns"></div>
       <div style="margin-top:14px" class="toggle">
-        <div class="switch on" id="swPulse"></div><span>Monitor beep / pulse tone</span>
+        <div class="switch" id="swPulse"></div><span>Monitor beep / pulse tone</span>
       </div>
       <div style="margin-top:10px" class="toggle">
         <div class="switch" id="swAline"></div><span>Arterial line (A-line) placed — show ART waveform</span>
@@ -417,6 +444,12 @@
   </div>
 </div>
 
+<!-- ============ 12-LEAD SNAPSHOT OVERLAY ============ -->
+<div id="twelve" class="twelve">
+  <div class="tvhead"><b>12-Lead ECG</b><span id="tvInfo"></span><button id="tvClose">✕ Close</button></div>
+  <canvas id="cTwelve"></canvas>
+</div>
+
 <!-- ============ CAMERA ============ -->
 <div id="camera">
   <video id="camLocal" autoplay playsinline muted></video>
@@ -439,12 +472,14 @@
 /* ---------- shared state model ---------- */
 const STATE = {
   rhythm:"sinus", hr:80, spo2:98, rr:16, etco2:38,
-  sys:120, dia:80, temp:98.6, pulse:true, pea:false, aline:false, perfusion:100,
+  sys:120, dia:80, temp:98.6, pulse:false, pea:false, aline:false, perfusion:100,
   patient:"Adult",
   // defibrillation / cardioversion
   shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0,
   // transcutaneous pacing
-  pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60
+  pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
+  // 12-lead
+  stemiSite:"anterior", ecg12Seq:0
 };
 
 /* ---------- room + role ---------- */
@@ -743,7 +778,7 @@ function runMonitor(){
 
   // numbers + alarms
   let nibpShown=null, nibpCycling=false, eventsPrimed=false;
-  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0;
+  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0, lastTwelveSeq=STATE.ecg12Seq||0;
   // don't fire shock/NIBP events from the retained state we receive on load;
   // re-baseline for ~2s while the initial sync settles, then arm real events.
   setTimeout(()=>{ eventsPrimed=true; }, 2000);
@@ -789,10 +824,11 @@ function runMonitor(){
   function updNums(){
     // events that arrive via state sync (suppressed until initial sync settles)
     if(!eventsPrimed){
-      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0;
+      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0; lastTwelveSeq=STATE.ecg12Seq||0;
     } else {
       if((STATE.nibpSeq||0)>lastNibpSeq){ lastNibpSeq=STATE.nibpSeq; cycleNibp(); }
       if((STATE.shockSeq||0)>lastShockSeq){ lastShockSeq=STATE.shockSeq; ecg.triggerShock(); flashShock(STATE.lastShockEnergy); }
+      if((STATE.ecg12Seq||0)>lastTwelveSeq){ lastTwelveSeq=STATE.ecg12Seq; renderTwelveLead(); }
     }
 
     let hrShow;
@@ -866,6 +902,10 @@ function runMonitor(){
     mCamBtn.classList.remove("on"); mCamBtn.textContent="🎥 Camera";
   }
   mCamBtn.onclick=()=>{ monCamStream? monStopCam() : monStartCam(); };
+
+  // 12-lead snapshot (acquire from the monitor, or remotely from Control)
+  document.getElementById("m12Lead").onclick=renderTwelveLead;
+  document.getElementById("tvClose").onclick=()=>document.getElementById("twelve").classList.remove("show");
 
   // fullscreen toggle (works on desktop & iPad Safari that support the Fullscreen API)
   document.getElementById("mFull").onclick=()=>{
@@ -964,6 +1004,68 @@ function runMonitor(){
   }
 }
 function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+/* =========================================================================
+   12-LEAD ECG SNAPSHOT — derives a 12-lead from the current rhythm using a
+   simplified per-lead vector model + territory-specific ST changes.
+   ========================================================================= */
+const LEAD12=[["I","aVR","V1","V4"],["II","aVL","V2","V5"],["III","aVF","V3","V6"]];
+const LEADF={I:0.7,II:1.0,III:0.45,aVR:-0.8,aVL:0.45,aVF:0.7,V1:-0.4,V2:0.5,V3:0.9,V4:1.2,V5:1.0,V6:0.75};
+const STEMI_ST={
+  anterior:{V2:0.28,V3:0.30,V4:0.24,II:-0.10,III:-0.10,aVF:-0.10},
+  septal:{V1:0.26,V2:0.30,V3:0.14},
+  inferior:{II:0.28,III:0.32,aVF:0.26,I:-0.12,aVL:-0.14},
+  lateral:{I:0.22,aVL:0.24,V5:0.22,V6:0.20,III:-0.12}
+};
+function leadST(lead){
+  if(STATE.rhythm==="stemi" && STATE.stemiSite && STATE.stemiSite!=="none") return (STEMI_ST[STATE.stemiSite]||{})[lead]||0;
+  if(STATE.rhythm==="ischemia") return ({I:-0.08,II:-0.10,aVL:-0.08,V4:-0.12,V5:-0.12,V6:-0.10})[lead]||0;
+  return 0;
+}
+function leadValue(lead,t){
+  const c=RHYTHMS[STATE.rhythm]||RHYTHMS.sinus, f=LEADF[lead]||0.6;
+  if(c.special==="asys") return (Math.random()-0.5)*0.02;
+  if(c.special==="vf") return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f);
+  let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
+  const beatLen=60/hr, tau=t%beatLen; let v=0;
+  const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
+  if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);
+  const pr=c.pr||0.16, wide=c.wide?1.9:1;
+  v+=gauss(tau,pr-0.015,0.012*wide,-0.10*f);
+  v+=gauss(tau,pr+0.01,0.016*wide,c.r*f);
+  v+=gauss(tau,pr+0.05,0.018*wide,-0.30*f*0.5);
+  const tC=pr+0.30, st=leadST(lead);
+  if(tau>pr+0.08 && tau<tC) v+=st;
+  v+=gauss(tau,tC,0.06,(c.t)*f*0.6 + (st>0?st*0.4:0));
+  return v;
+}
+function renderTwelveLead(){
+  const ov=document.getElementById("twelve"); ov.classList.add("show");
+  let lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus";
+  if(STATE.rhythm==="stemi"&&STATE.stemiSite&&STATE.stemiSite!=="none") lab+=" — "+STATE.stemiSite.toUpperCase()+" STEMI";
+  document.getElementById("tvInfo").textContent=new Date().toLocaleString()+"   HR "+(STATE.rhythm==="asystole"?0:STATE.hr)+"   "+lab;
+  const cv=document.getElementById("cTwelve"), ctx=cv.getContext("2d"), dpr=devicePixelRatio;
+  const r=cv.getBoundingClientRect(), W=cv.width=r.width*dpr, H=cv.height=r.height*dpr;
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  const sm=8*dpr;
+  ctx.strokeStyle="#f6cccc"; ctx.lineWidth=1*dpr;
+  for(let x=0;x<W;x+=sm){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=sm){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.strokeStyle="#e79a9a"; ctx.lineWidth=1.4*dpr;
+  for(let x=0;x<W;x+=sm*5){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=sm*5){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  const cols=4, rows=3, stripH=H*0.20, gridH=H-stripH, cw=W/cols, ch=gridH/rows;
+  ctx.lineJoin="round"; ctx.lineCap="round"; ctx.font="bold "+(13*dpr)+"px sans-serif";
+  function drawLead(lead,x0,y0,w,h,durSec){
+    const baseY=y0+h*0.55, amp=h*0.30, pps=w/durSec;
+    ctx.fillStyle="#000"; ctx.fillText(lead,x0+7*dpr,y0+18*dpr);
+    ctx.strokeStyle="#000"; ctx.lineWidth=1.6*dpr; ctx.beginPath();
+    for(let px=0;px<=w;px++){ const yy=baseY-leadValue(lead,px/pps)*amp; if(px===0)ctx.moveTo(x0+px,yy); else ctx.lineTo(x0+px,yy); }
+    ctx.stroke();
+  }
+  for(let rI=0;rI<rows;rI++) for(let cI=0;cI<cols;cI++) drawLead(LEAD12[rI][cI], cI*cw, rI*ch, cw, ch, 2.5);
+  drawLead("II", 0, gridH, W, stripH, 10);   // rhythm strip
+}
 
 /* =========================================================================
    WEBRTC LIVE CAMERA — camera role streams to the Control viewer.
@@ -1176,6 +1278,7 @@ function runControl(){
     document.getElementById("swPacer").classList.toggle("on",STATE.pacerOn);
     document.getElementById("lEnergy").textContent=STATE.shockEnergy;
     [...document.getElementById("energyBtns").children].forEach(c=>c.classList.toggle("active",+c.dataset.j===STATE.shockEnergy));
+    const ss=document.getElementById("stemiSite"); if(ss&&STATE.stemiSite) ss.value=STATE.stemiSite;
     syncSliders();}
 
   // toggles
@@ -1247,12 +1350,18 @@ function runControl(){
   };
   document.getElementById("rampStop").onclick=clearTrends;
 
+  /* ---- 12-lead ECG ---- */
+  const siteSel=document.getElementById("stemiSite");
+  siteSel.value=STATE.stemiSite||"anterior";
+  siteSel.onchange=e=>{ STATE.stemiSite=e.target.value; push("STEMI site "+STATE.stemiSite); };
+  document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); };
+
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
     clearTrends();
     if(nibpTimer){clearInterval(nibpTimer);nibpTimer=null;} document.getElementById("nibpAuto").value="0";
     setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,perfusion:100,
-      pulse:true,pea:false,aline:false,sync:false,autoConvert:true,
+      pulse:false,pea:false,aline:false,sync:false,autoConvert:true,
       pacerOn:false,pacerRate:70,pacerMa:0,captureMa:60,shockEnergy:200});
     push("reset for new group");
   };
