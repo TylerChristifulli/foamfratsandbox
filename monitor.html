@@ -1012,10 +1012,10 @@ function getCss(v){return getComputedStyle(document.documentElement).getProperty
 const LEAD12=[["I","aVR","V1","V4"],["II","aVL","V2","V5"],["III","aVF","V3","V6"]];
 const LEADF={I:0.7,II:1.0,III:0.45,aVR:-0.8,aVL:0.45,aVF:0.7,V1:-0.4,V2:0.5,V3:0.9,V4:1.2,V5:1.0,V6:0.75};
 const STEMI_ST={
-  anterior:{V2:0.28,V3:0.30,V4:0.24,II:-0.10,III:-0.10,aVF:-0.10},
-  septal:{V1:0.26,V2:0.30,V3:0.14},
-  inferior:{II:0.28,III:0.32,aVF:0.26,I:-0.12,aVL:-0.14},
-  lateral:{I:0.22,aVL:0.24,V5:0.22,V6:0.20,III:-0.12}
+  anterior:{V1:0.30,V2:0.50,V3:0.55,V4:0.45,V5:0.25,II:-0.18,III:-0.18,aVF:-0.18},
+  septal:{V1:0.45,V2:0.52,V3:0.28,aVR:0.12},
+  inferior:{II:0.48,III:0.55,aVF:0.46,I:-0.22,aVL:-0.26},
+  lateral:{I:0.38,aVL:0.40,V5:0.38,V6:0.34,III:-0.20,aVF:-0.16}
 };
 function leadST(lead){
   if(STATE.rhythm==="stemi" && STATE.stemiSite && STATE.stemiSite!=="none") return (STEMI_ST[STATE.stemiSite]||{})[lead]||0;
@@ -1031,12 +1031,18 @@ function leadValue(lead,t){
   const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
   if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);
   const pr=c.pr||0.16, wide=c.wide?1.9:1;
-  v+=gauss(tau,pr-0.015,0.012*wide,-0.10*f);
-  v+=gauss(tau,pr+0.01,0.016*wide,c.r*f);
-  v+=gauss(tau,pr+0.05,0.018*wide,-0.30*f*0.5);
-  const tC=pr+0.30, st=leadST(lead);
-  if(tau>pr+0.08 && tau<tC) v+=st;
-  v+=gauss(tau,tC,0.06,(c.t)*f*0.6 + (st>0?st*0.4:0));
+  const st=leadST(lead);
+  v+=gauss(tau,pr-0.015,0.012*wide,-0.10*f);                          // q
+  v+=gauss(tau,pr+0.01,0.016*wide,c.r*f);                             // R
+  v+=gauss(tau,pr+0.05,0.018*wide, st>0 ? -0.05*Math.abs(f) : -0.30*f*0.5); // S (shallow when elevated)
+  const tC=pr+0.30;
+  if(st>0){                                                           // coved ST elevation → tall hyperacute T
+    if(tau>pr+0.07 && tau<tC+0.16){ const x=Math.min((tau-(pr+0.07))/0.27,1); v+=st*(1-0.18*Math.cos(Math.PI*x)); }
+    v+=gauss(tau,tC+0.03,0.07, 0.32+st*0.5);
+  } else {
+    if(tau>pr+0.08 && tau<tC) v+=st;                                  // ST depression (reciprocal / ischemia)
+    v+=gauss(tau,tC,0.06,c.t*f*0.6);
+  }
   return v;
 }
 function renderTwelveLead(){
