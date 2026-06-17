@@ -44,7 +44,7 @@
 
   /* ---------- Monitor (X Series style) ---------- */
   #monitor{display:none;height:100%;flex-direction:column;background:#000;}
-  .topbar{display:flex;align-items:center;height:30px;font-size:13px;color:#fff;
+  .topbar{display:flex;align-items:center;height:42px;font-size:13px;color:#fff;
     background:#0a0a0a;border-bottom:1px solid #222;}
   .topbar .date{background:#15489c;color:#fff;padding:0 10px;height:100%;display:flex;
     align-items:center;font-variant-numeric:tabular-nums;}
@@ -56,8 +56,14 @@
   .dot{width:8px;height:8px;border-radius:50%;background:#444;margin:0 8px;}
   .dot.on{background:var(--ecg);box-shadow:0 0 6px var(--ecg);}
   .cambtn{margin-right:10px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
-    border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;}
-  .cambtn.on{background:#b81212;border-color:#ff6a6a;color:#fff;}
+    border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;
+    -webkit-tap-highlight-color:rgba(255,255,255,.2);touch-action:manipulation;}
+  /* draw attention to the camera button while it's OFF so it's an obvious tap target */
+  #mCamBtn:not(.on){background:#1d3a5e;border-color:#4aa3ff;color:#dcefff;
+    animation:campulse 1.8s ease-in-out infinite;}
+  @keyframes campulse{0%,100%{box-shadow:0 0 0 0 rgba(74,163,255,.45);}
+    50%{box-shadow:0 0 0 5px rgba(74,163,255,0);}}
+  .cambtn.on{background:#b81212;border-color:#ff6a6a;color:#fff;animation:none;}
   .monpip{position:absolute;bottom:124px;right:12px;width:150px;height:84px;object-fit:cover;
     border:1px solid var(--ecg);border-radius:6px;background:#000;z-index:8;display:none;transform:scaleX(-1);}
 
