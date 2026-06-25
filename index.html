@@ -9,487 +9,505 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#06010f;
-    --bg-2:#0c0320;
-    --magenta:#ff2e88;
-    --cyan:#00eaff;
-    --amber:#ffd60a;
-    --green:#34e3a0;
-    --purple:#7a3cff;
-    --text:#eafcff;
-    --dim:#8a7fb0;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{
-    font-family:"VT323","Courier New",monospace;
-    background:
-      radial-gradient(900px 600px at 50% -10%, rgba(122,60,255,.35), transparent 60%),
-      radial-gradient(700px 500px at 85% 20%, rgba(255,46,136,.18), transparent 60%),
-      radial-gradient(700px 500px at 12% 30%, rgba(0,234,255,.16), transparent 60%),
-      linear-gradient(180deg,var(--bg-2),var(--bg));
-    color:var(--text);
-    min-height:100%;
-    overflow-x:hidden;
-    position:relative;
-    -webkit-font-smoothing:antialiased;
-  }
+:root{
+--bg:#06010f;
+--bg-2:#0c0320;
+--magenta:#ff2e88;
+--cyan:#00eaff;
+--amber:#ffd60a;
+--green:#34e3a0;
+--purple:#7a3cff;
+--text:#eafcff;
+--dim:#8a7fb0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+font-family:"VT323","Courier New",monospace;
+background:
+radial-gradient(900px 600px at 50% -10%, rgba(122,60,255,.35), transparent 60%),
+radial-gradient(700px 500px at 85% 20%, rgba(255,46,136,.18), transparent 60%),
+radial-gradient(700px 500px at 12% 30%, rgba(0,234,255,.16), transparent 60%),
+linear-gradient(180deg,var(--bg-2),var(--bg));
+color:var(--text);
+min-height:100%;
+overflow-x:hidden;
+position:relative;
+-webkit-font-smoothing:antialiased;
+}
 
-  /* ===== CRT scanlines + flicker + vignette ===== */
-  .crt{
-    pointer-events:none;
-    position:fixed;
-    inset:0;
-    z-index:50;
-  }
-  .crt::before{
-    content:"";
-    position:absolute;
-    inset:0;
-    background:repeating-linear-gradient(
-      to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,0) 2px,
-      rgba(0,0,0,.22) 3px,
-      rgba(0,0,0,.22) 3px
-    );
-    mix-blend-mode:multiply;
-  }
-  .crt::after{
-    content:"";
-    position:absolute;
-    inset:0;
-    background:radial-gradient(120% 120% at 50% 50%, transparent 60%, rgba(0,0,0,.55) 100%);
-    animation:flicker 5s infinite;
-  }
-  @keyframes flicker{
-    0%,100%{opacity:1}
-    92%{opacity:1}
-    93%{opacity:.82}
-    94%{opacity:1}
-    96%{opacity:.9}
-    97%{opacity:1}
-  }
+/* ===== CRT scanlines + flicker + vignette ===== */
+.crt{
+pointer-events:none;
+position:fixed;
+inset:0;
+z-index:50;
+}
+.crt::before{
+content:"";
+position:absolute;
+inset:0;
+background:repeating-linear-gradient(
+to bottom,
+rgba(0,0,0,0) 0px,
+rgba(0,0,0,0) 2px,
+rgba(0,0,0,.22) 3px,
+rgba(0,0,0,.22) 3px
+);
+mix-blend-mode:multiply;
+}
+.crt::after{
+content:"";
+position:absolute;
+inset:0;
+background:radial-gradient(120% 120% at 50% 50%, transparent 60%, rgba(0,0,0,.55) 100%);
+animation:flicker 5s infinite;
+}
+@keyframes flicker{
+0%,100%{opacity:1}
+92%{opacity:1}
+93%{opacity:.82}
+94%{opacity:1}
+96%{opacity:.9}
+97%{opacity:1}
+}
 
-  /* ===== neon grid floor ===== */
-  .floor{
-    position:fixed;
-    left:50%;
-    bottom:0;
-    width:200vw;
-    height:34vh;
-    transform:translateX(-50%) perspective(900px) rotateX(58deg);
-    transform-origin:bottom center;
-    overflow:hidden;
-    -webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
-    mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
-    z-index:0;
-    pointer-events:none;
-  }
-  .floor::before{
-    content:"";
-    position:absolute;
-    left:0;
-    right:0;
-    top:-96px;
-    bottom:-96px;
-    background-image:
-      linear-gradient(rgba(0,234,255,.26) 2px, transparent 2px),
-      linear-gradient(90deg, rgba(255,46,136,.22) 2px, transparent 2px);
-    background-size:48px 48px;
-    will-change:transform;
-    transform:translateZ(0);
-    backface-visibility:hidden;
-    animation:gridscroll 1.8s linear infinite;
-  }
-  @keyframes gridscroll{
-    from{transform:translate3d(0,0,0)}
-    to{transform:translate3d(0,48px,0)}
-  }
-  @media(prefers-reduced-motion:reduce){
-    .floor::before{animation:none}
-  }
+/* ===== neon grid floor ===== */
+.floor{
+position:fixed;
+left:50%;
+bottom:0;
+width:200vw;
+height:34vh;
+transform:translateX(-50%) perspective(900px) rotateX(58deg);
+transform-origin:bottom center;
+overflow:hidden;
+-webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
+mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.55) 40%, transparent 70%);
+z-index:0;
+pointer-events:none;
+}
+.floor::before{
+content:"";
+position:absolute;
+left:0;
+right:0;
+top:-96px;
+bottom:-96px;
+background-image:
+linear-gradient(rgba(0,234,255,.26) 2px, transparent 2px),
+linear-gradient(90deg, rgba(255,46,136,.22) 2px, transparent 2px);
+background-size:48px 48px;
+will-change:transform;
+transform:translateZ(0);
+backface-visibility:hidden;
+animation:gridscroll 1.8s linear infinite;
+}
+@keyframes gridscroll{
+from{transform:translate3d(0,0,0)}
+to{transform:translate3d(0,48px,0)}
+}
+@media(prefers-reduced-motion:reduce){
+.floor::before{animation:none}
+}
 
-  .wrap{
-    position:relative;
-    z-index:10;
-    max-width:1480px;
-    margin:0 auto;
-    padding:46px 22px 90px;
-    text-align:center;
-  }
+.wrap{
+position:relative;
+z-index:10;
+max-width:1480px;
+margin:0 auto;
+padding:46px 22px 90px;
+text-align:center;
+}
 
-  /* ===== marquee title ===== */
-  .marquee-tag{
-    font-family:"Press Start 2P",monospace;
-    font-size:10px;
-    letter-spacing:.32em;
-    color:var(--cyan);
-    text-shadow:0 0 8px var(--cyan);
-    margin-bottom:18px;
-  }
-  h1{
-    font-family:"Press Start 2P",monospace;
-    line-height:1.35;
-    font-size:clamp(20px,5.2vw,44px);
-    color:#fff;
-    text-shadow:
-      0 0 6px #fff,
-      0 0 14px var(--magenta),
-      0 0 30px var(--magenta),
-      0 0 54px rgba(255,46,136,.6);
-    margin-bottom:6px;
-  }
-  h1 .alt{
-    color:#fff;
-    text-shadow:
-      0 0 6px #fff,
-      0 0 14px var(--cyan),
-      0 0 30px var(--cyan),
-      0 0 54px rgba(0,234,255,.6);
-  }
-  h1 .flick{animation:textflick 3.2s infinite}
-  @keyframes textflick{
-    0%,96%,100%{opacity:1}
-    97%{opacity:.35}
-    98%{opacity:1}
-    98.6%{opacity:.5}
-  }
-  .tagline{
-    font-size:24px;
-    color:var(--dim);
-    margin:14px 0 6px;
-    letter-spacing:.04em;
-  }
-  .tagline b{color:var(--amber);text-shadow:0 0 10px rgba(255,214,10,.5)}
+/* ===== marquee title ===== */
+.marquee-tag{
+font-family:"Press Start 2P",monospace;
+font-size:10px;
+letter-spacing:.32em;
+color:var(--cyan);
+text-shadow:0 0 8px var(--cyan);
+margin-bottom:18px;
+}
+h1{
+font-family:"Press Start 2P",monospace;
+line-height:1.35;
+font-size:clamp(20px,5.2vw,44px);
+color:#fff;
+text-shadow:
+0 0 6px #fff,
+0 0 14px var(--magenta),
+0 0 30px var(--magenta),
+0 0 54px rgba(255,46,136,.6);
+margin-bottom:6px;
+}
+h1 .alt{
+color:#fff;
+text-shadow:
+0 0 6px #fff,
+0 0 14px var(--cyan),
+0 0 30px var(--cyan),
+0 0 54px rgba(0,234,255,.6);
+}
+h1 .flick{animation:textflick 3.2s infinite}
+@keyframes textflick{
+0%,96%,100%{opacity:1}
+97%{opacity:.35}
+98%{opacity:1}
+98.6%{opacity:.5}
+}
+.tagline{
+font-size:24px;
+color:var(--dim);
+margin:14px 0 6px;
+letter-spacing:.04em;
+}
+.tagline b{color:var(--amber);text-shadow:0 0 10px rgba(255,214,10,.5)}
 
-  .coin{
-    font-family:"Press Start 2P",monospace;
-    font-size:11px;
-    color:var(--amber);
-    letter-spacing:.18em;
-    margin:26px 0 38px;
-    animation:blink 1.05s steps(1) infinite;
-    text-shadow:0 0 12px rgba(255,214,10,.7);
-  }
-  @keyframes blink{50%{opacity:0}}
+.coin{
+font-family:"Press Start 2P",monospace;
+font-size:11px;
+color:var(--amber);
+letter-spacing:.18em;
+margin:26px 0 38px;
+animation:blink 1.05s steps(1) infinite;
+text-shadow:0 0 12px rgba(255,214,10,.7);
+}
+@keyframes blink{50%{opacity:0}}
 
-  /* ===== cabinet ===== */
-  .cab-row{
-    display:flex;
-    justify-content:center;
-    gap:22px;
-    flex-wrap:wrap;
-  }
-  .cabinet{
-    width:320px;
-    max-width:92vw;
-    background:linear-gradient(180deg,#190a33,#0d0520);
-    border:2px solid rgba(255,46,136,.5);
-    border-radius:18px 18px 12px 12px;
-    padding:14px 14px 20px;
-    box-shadow:
-      0 0 0 2px rgba(0,0,0,.4),
-      0 0 26px rgba(255,46,136,.32),
-      inset 0 0 30px rgba(122,60,255,.18);
-    position:relative;
-    transition:transform .18s ease, box-shadow .18s ease;
-  }
-  .cabinet:hover{
-    transform:translateY(-6px);
-    box-shadow:
-      0 0 0 2px rgba(0,0,0,.4),
-      0 0 40px rgba(255,46,136,.55),
-      inset 0 0 30px rgba(122,60,255,.25);
-  }
-  .cab-marquee{
-    font-family:"Press Start 2P",monospace;
-    font-size:12px;
-    color:#fff;
-    text-shadow:0 0 10px var(--cyan),0 0 22px var(--cyan);
-    background:linear-gradient(180deg,#231147,#150a2e);
-    border:1px solid rgba(0,234,255,.45);
-    border-radius:8px;
-    padding:12px 8px;
-    margin-bottom:12px;
-    letter-spacing:.04em;
-  }
-  .screen{
-    background:#02060a;
-    border:2px solid rgba(0,234,255,.35);
-    border-radius:8px;
-    height:160px;
-    overflow:hidden;
-    position:relative;
-    box-shadow:inset 0 0 30px rgba(0,234,255,.22);
-  }
-  .screen svg{display:block;width:100%;height:100%}
-  .ecg-path{
-    fill:none;
-    stroke:var(--green);
-    stroke-width:2.4;
-    filter:drop-shadow(0 0 5px var(--green));
-    stroke-linecap:round;
-    stroke-linejoin:round;
-    stroke-dasharray:1400;
-    stroke-dashoffset:1400;
-    animation:trace 3.4s linear infinite;
-  }
-  @keyframes trace{
-    0%{stroke-dashoffset:1400}
-    100%{stroke-dashoffset:0}
-  }
-  .scr-label{
-    position:absolute;
-    top:8px;left:10px;
-    font-size:18px;
-    color:var(--green);
-    text-shadow:0 0 8px var(--green);
-    opacity:.85;
-  }
-  .scr-bpm{
-    position:absolute;
-    bottom:6px;right:10px;
-    font-size:18px;
-    color:var(--cyan);
-    text-shadow:0 0 8px var(--cyan);
-  }
+/* ===== cabinet ===== */
+.cab-row{
+display:flex;
+justify-content:center;
+gap:22px;
+flex-wrap:wrap;
+}
+.cabinet{
+width:320px;
+max-width:92vw;
+background:linear-gradient(180deg,#190a33,#0d0520);
+border:2px solid rgba(255,46,136,.5);
+border-radius:18px 18px 12px 12px;
+padding:14px 14px 20px;
+box-shadow:
+0 0 0 2px rgba(0,0,0,.4),
+0 0 26px rgba(255,46,136,.32),
+inset 0 0 30px rgba(122,60,255,.18);
+position:relative;
+transition:transform .18s ease, box-shadow .18s ease;
+}
+.cabinet:hover{
+transform:translateY(-6px);
+box-shadow:
+0 0 0 2px rgba(0,0,0,.4),
+0 0 40px rgba(255,46,136,.55),
+inset 0 0 30px rgba(122,60,255,.25);
+}
+.cab-marquee{
+font-family:"Press Start 2P",monospace;
+font-size:12px;
+color:#fff;
+text-shadow:0 0 10px var(--cyan),0 0 22px var(--cyan);
+background:linear-gradient(180deg,#231147,#150a2e);
+border:1px solid rgba(0,234,255,.45);
+border-radius:8px;
+padding:12px 8px;
+margin-bottom:12px;
+letter-spacing:.04em;
+}
+.screen{
+background:#02060a;
+border:2px solid rgba(0,234,255,.35);
+border-radius:8px;
+height:160px;
+overflow:hidden;
+position:relative;
+box-shadow:inset 0 0 30px rgba(0,234,255,.22);
+}
+.screen svg{display:block;width:100%;height:100%}
+.ecg-path{
+fill:none;
+stroke:var(--green);
+stroke-width:2.4;
+filter:drop-shadow(0 0 5px var(--green));
+stroke-linecap:round;
+stroke-linejoin:round;
+stroke-dasharray:1400;
+stroke-dashoffset:1400;
+animation:trace 3.4s linear infinite;
+}
+@keyframes trace{
+0%{stroke-dashoffset:1400}
+100%{stroke-dashoffset:0}
+}
+.scr-label{
+position:absolute;
+top:8px;left:10px;
+font-size:18px;
+color:var(--green);
+text-shadow:0 0 8px var(--green);
+opacity:.85;
+}
+.scr-bpm{
+position:absolute;
+bottom:6px;right:10px;
+font-size:18px;
+color:var(--cyan);
+text-shadow:0 0 8px var(--cyan);
+}
 
-  .cab-title{
-    font-size:25px;
-    color:#fff;
-    margin:14px 0 2px;
-    letter-spacing:.02em;
-  }
-  .cab-sub{
-    font-size:18px;
-    color:var(--dim);
-    margin-bottom:14px;
-  }
-  .badges{
-    display:flex;gap:6px;justify-content:center;flex-wrap:wrap;
-    margin-bottom:16px;
-  }
-  .badge{
-    font-family:"Press Start 2P",monospace;
-    font-size:7px;
-    letter-spacing:.1em;
-    padding:5px 7px;
-    border-radius:5px;
-    border:1px solid rgba(255,255,255,.18);
-    color:var(--dim);
-    background:rgba(255,255,255,.03);
-  }
-  .badge.on{color:var(--amber);border-color:rgba(255,214,10,.4)}
+.cab-title{
+font-size:25px;
+color:#fff;
+margin:14px 0 2px;
+letter-spacing:.02em;
+}
+.cab-sub{
+font-size:18px;
+color:var(--dim);
+margin-bottom:14px;
+}
+.badges{
+display:flex;gap:6px;justify-content:center;flex-wrap:wrap;
+margin-bottom:16px;
+}
+.badge{
+font-family:"Press Start 2P",monospace;
+font-size:7px;
+letter-spacing:.1em;
+padding:5px 7px;
+border-radius:5px;
+border:1px solid rgba(255,255,255,.18);
+color:var(--dim);
+background:rgba(255,255,255,.03);
+}
+.badge.on{color:var(--amber);border-color:rgba(255,214,10,.4)}
 
-  .play{
-    display:inline-block;
-    font-family:"Press Start 2P",monospace;
-    font-size:12px;
-    letter-spacing:.08em;
-    color:#0a0014;
-    background:linear-gradient(180deg,#ffe24a,var(--amber));
-    border:none;
-    border-radius:8px;
-    padding:14px 22px;
-    text-decoration:none;
-    cursor:pointer;
-    box-shadow:0 4px 0 #b8920a, 0 0 22px rgba(255,214,10,.5);
-    transition:transform .08s ease, box-shadow .08s ease;
-  }
-  .play:hover{filter:brightness(1.06)}
-  .play:active{transform:translateY(4px);box-shadow:0 0 0 #b8920a,0 0 22px rgba(255,214,10,.5)}
+.play{
+display:inline-block;
+font-family:"Press Start 2P",monospace;
+font-size:12px;
+letter-spacing:.08em;
+color:#0a0014;
+background:linear-gradient(180deg,#ffe24a,var(--amber));
+border:none;
+border-radius:8px;
+padding:14px 22px;
+text-decoration:none;
+cursor:pointer;
+box-shadow:0 4px 0 #b8920a, 0 0 22px rgba(255,214,10,.5);
+transition:transform .08s ease, box-shadow .08s ease;
+}
+.play:hover{filter:brightness(1.06)}
+.play:active{transform:translateY(4px);box-shadow:0 0 0 #b8920a,0 0 22px rgba(255,214,10,.5)}
 
-  /* venous return flow animation */
-  .vessel{fill:none;stroke:rgba(90,200,255,.16);stroke-width:14;stroke-linecap:round}
-  .flow{
-    fill:none;stroke:#5ac8ff;stroke-width:6;stroke-linecap:round;
-    stroke-dasharray:14 26;
-    filter:drop-shadow(0 0 5px #5ac8ff);
-    animation:flow 1.05s linear infinite;
-  }
-  @keyframes flow{to{stroke-dashoffset:-80}}
-  .heart-pulse{
-    fill:var(--magenta);
-    filter:drop-shadow(0 0 8px var(--magenta));
-    transform-box:fill-box;transform-origin:center;
-    animation:hb 1.05s ease-in-out infinite;
-  }
-  @keyframes hb{0%,100%{transform:scale(1)}45%{transform:scale(1.15)}}
+/* venous return flow animation */
+.vessel{fill:none;stroke:rgba(90,200,255,.16);stroke-width:14;stroke-linecap:round}
+.flow{
+fill:none;stroke:#5ac8ff;stroke-width:6;stroke-linecap:round;
+stroke-dasharray:14 26;
+filter:drop-shadow(0 0 5px #5ac8ff);
+animation:flow 1.05s linear infinite;
+}
+@keyframes flow{to{stroke-dashoffset:-80}}
+.heart-pulse{
+fill:var(--magenta);
+filter:drop-shadow(0 0 8px var(--magenta));
+transform-box:fill-box;transform-origin:center;
+animation:hb 1.05s ease-in-out infinite;
+}
+@keyframes hb{0%,100%{transform:scale(1)}45%{transform:scale(1.15)}}
 
-  /* shock PK curve */
-  .pk-path{fill:none;stroke:var(--amber);stroke-width:2.6;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.2s linear infinite}
+/* shock PK curve */
+.pk-path{fill:none;stroke:var(--amber);stroke-width:2.6;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.2s linear infinite}
 
-  /* DIC clot pulse */
-  .clot{fill:#ff5a5f;filter:drop-shadow(0 0 4px #ff5a5f);transform-box:fill-box;transform-origin:center;animation:clotpulse 2.4s ease-in-out infinite}
-  @keyframes clotpulse{0%,100%{opacity:.2;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
+/* DIC clot pulse */
+.clot{fill:#ff5a5f;filter:drop-shadow(0 0 4px #ff5a5f);transform-box:fill-box;transform-origin:center;animation:clotpulse 2.4s ease-in-out infinite}
+@keyframes clotpulse{0%,100%{opacity:.2;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
 
-  /* sim monitor multi-trace */
-  .pleth-path{fill:none;stroke:var(--amber);stroke-width:2.2;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.4s linear infinite}
+/* sim monitor multi-trace */
+.pleth-path{fill:none;stroke:var(--amber);stroke-width:2.2;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.4s linear infinite}
 
-  footer{
-    position:relative;
-    z-index:10;
-    text-align:center;
-    padding:30px 16px 40px;
-    color:var(--dim);
-    font-size:18px;
-  }
-  footer .more{
-    font-family:"Press Start 2P",monospace;
-    font-size:9px;
-    color:var(--purple);
-    text-shadow:0 0 10px rgba(122,60,255,.6);
-    letter-spacing:.16em;
-    animation:blink 2.2s steps(1) infinite;
-    display:block;
-    margin-bottom:14px;
-  }
-  footer a{color:var(--cyan);text-decoration:none}
-  footer a:hover{text-decoration:underline}
+footer{
+position:relative;
+z-index:10;
+text-align:center;
+padding:30px 16px 40px;
+color:var(--dim);
+font-size:18px;
+}
+footer .more{
+font-family:"Press Start 2P",monospace;
+font-size:9px;
+color:var(--purple);
+text-shadow:0 0 10px rgba(122,60,255,.6);
+letter-spacing:.16em;
+animation:blink 2.2s steps(1) infinite;
+display:block;
+margin-bottom:14px;
+}
+footer a{color:var(--cyan);text-decoration:none}
+footer a:hover{text-decoration:underline}
 
-  @media(max-width:560px){
-    .marquee-tag{font-size:8px}
-    .coin{font-size:9px}
-  }
+@media(max-width:560px){
+.marquee-tag{font-size:8px}
+.coin{font-size:9px}
+}
 </style>
 </head>
 <body>
-  <div class="floor" aria-hidden="true"></div>
+<div class="floor" aria-hidden="true"></div>
 
-  <main class="wrap">
-    <div class="marquee-tag">◄ FOAMfrat PRESENTS ►</div>
-    <h1><span class="alt">FOAMfrat</span><br><span class="flick">SANDBOX</span></h1>
-    <p class="tagline"><b>FOAMed</b> Learning Arcade</p>
+<main class="wrap">
+<div class="marquee-tag">◄ FOAMfrat PRESENTS ►</div>
+<h1><span class="alt">FOAMfrat</span><br><span class="flick">SANDBOX</span></h1>
+<p class="tagline"><b>FOAMed</b> Learning Arcade</p>
 
-    <div class="cab-row">
-      <!-- Rhythm Lab cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee">RHYTHM LAB</div>
-        <div class="screen">
-          <span class="scr-label">SA NODE</span>
-          <span class="scr-bpm">72 BPM</span>
-          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-            <path class="ecg-path" d="
-              M0,90 L70,90 L84,90
-              Q90,84 96,90
-              L120,90 L132,90 L138,70 L150,118 L160,40 L172,110 L182,90
-              L210,90
-              Q236,40 262,90
-              L300,90 L314,90
-              Q320,84 326,90
-              L352,90 L364,90 L370,70 L382,118 L392,40 L404,110 L414,90
-              L442,90
-              Q468,40 494,90
-              L540,90 L560,90 L600,90" />
-          </svg>
-        </div>
-        <h2 class="cab-title">Rhythm Lab</h2>
-        <p class="cab-sub">The SA Node Drives the Beat</p>
-        <div class="badges">
-          <span class="badge">1 PLAYER</span>
-        </div>
-        <a class="play" href="https://rhythm.foamfratsandbox.com/">PLAY ►</a>
-      </div>
+<div class="cab-row">
+<!-- Rhythm Lab cabinet -->
+<div class="cabinet">
+<div class="cab-marquee">RHYTHM LAB</div>
+<div class="screen">
+<span class="scr-label">SA NODE</span>
+<span class="scr-bpm">72 BPM</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<path class="ecg-path" d="
+M0,90 L70,90 L84,90
+Q90,84 96,90
+L120,90 L132,90 L138,70 L150,118 L160,40 L172,110 L182,90
+L210,90
+Q236,40 262,90
+L300,90 L314,90
+Q320,84 326,90
+L352,90 L364,90 L370,70 L382,118 L392,40 L404,110 L414,90
+L442,90
+Q468,40 494,90
+L540,90 L560,90 L600,90" />
+</svg>
+</div>
+<h2 class="cab-title">Rhythm Lab</h2>
+<p class="cab-sub">The SA Node Drives the Beat</p>
+<div class="badges">
+<span class="badge">1 PLAYER</span>
+</div>
+<a class="play" href="https://rhythm.foamfratsandbox.com/">PLAY ►</a>
+</div>
 
-      <!-- Sim Monitor cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee">SIM MONITOR</div>
-        <div class="screen">
-          <span class="scr-label">ECG II</span>
-          <span class="scr-bpm">80 BPM</span>
-          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-            <path class="ecg-path" d="
-              M0,74 L52,74 L64,74 Q70,68 76,74
-              L108,74 L120,74 L126,52 L138,104 L148,24 L160,98 L170,74
-              L208,74 L220,74 Q226,68 232,74
-              L300,74 L312,74 L318,52 L330,104 L340,24 L352,98 L362,74
-              L404,74 L416,74 Q422,68 428,74
-              L498,74 L510,74 L516,52 L528,104 L538,24 L550,98 L560,74 L600,74" />
-            <path class="pleth-path" d="
-              M0,138 Q30,138 44,118 Q58,98 78,118 Q92,132 110,138
-              L150,138 Q180,138 194,118 Q208,98 228,118 Q242,132 260,138
-              L300,138 Q330,138 344,118 Q358,98 378,118 Q392,132 410,138
-              L450,138 Q480,138 494,118 Q508,98 528,118 Q542,132 560,138 L600,138" />
-          </svg>
-        </div>
-        <h2 class="cab-title">Sim Monitor</h2>
-        <p class="cab-sub">Program vitals · push live to any screen</p>
-        <div class="badges">
-          <span class="badge on">2 PLAYER</span>
-          <span class="badge">iPAD READY</span>
-        </div>
-        <a class="play" href="monitor.html">PLAY ►</a>
-      </div>
+<!-- Reentry Lab cabinet -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px #34e3a0,0 0 22px #34e3a0;border-color:rgba(52,227,160,.5)">REENTRY LAB</div>
+<div class="screen">
+<span class="scr-label">SVT 2:1</span>
+<span class="scr-bpm">180 BPM</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<path class="ecg-path" d="M0,90 L20,90 L28,72 L36,116 L44,44 L52,108 L60,90 L90,90 L98,72 L106,116 L114,44 L122,108 L130,90 L160,90 L168,72 L176,116 L184,44 L192,108 L200,90 L230,90 L238,72 L246,116 L254,44 L262,108 L270,90 L300,90 L308,72 L316,116 L324,44 L332,108 L340,90 L370,90 L378,72 L386,116 L394,44 L402,108 L410,90 L440,90 L448,72 L456,116 L464,44 L472,108 L480,90 L510,90 L518,72 L526,116 L534,44 L542,108 L550,90 L600,90" />
+</svg>
+</div>
+<h2 class="cab-title">Reentry Lab</h2>
+<p class="cab-sub">Circuits that loop · AVNRT · WPW · VT</p>
+<div class="badges">
+<span class="badge">1 PLAYER</span>
+</div>
+<a class="play" href="reentry.html">PLAY ►</a>
+</div>
 
-      <!-- Venous Return cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee" style="text-shadow:0 0 10px #5ac8ff,0 0 22px #5ac8ff;border-color:rgba(90,200,255,.5)">VENOUS RETURN</div>
-        <div class="screen">
-          <span class="scr-label" style="color:#5ac8ff;text-shadow:0 0 8px #5ac8ff">MSFP → RAP</span>
-          <span class="scr-bpm" style="color:var(--magenta);text-shadow:0 0 8px var(--magenta)">ΔP</span>
-          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-            <path class="vessel" d="M16,124 C170,124 190,70 330,70 L600,70" />
-            <path class="flow"   d="M16,124 C170,124 190,70 330,70 L600,70" />
-            <path class="heart-pulse" d="M548,58 c-9,-13 -30,-4 -30,11 c0,13 30,29 30,29 c0,0 30,-16 30,-29 c0,-15 -21,-24 -30,-11 z"/>
-          </svg>
-        </div>
-        <h2 class="cab-title">Venous Return</h2>
-        <p class="cab-sub">Pressure gradients &amp; preload</p>
-        <div class="badges">
-          <span class="badge">1 PLAYER</span>
-        </div>
-        <a class="play" href="venous.html">PLAY ►</a>
-      </div>
+<!-- Sim Monitor cabinet -->
+<div class="cabinet">
+<div class="cab-marquee">SIM MONITOR</div>
+<div class="screen">
+<span class="scr-label">ECG II</span>
+<span class="scr-bpm">80 BPM</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<path class="ecg-path" d="
+M0,74 L52,74 L64,74 Q70,68 76,74
+L108,74 L120,74 L126,52 L138,104 L148,24 L160,98 L170,74
+L208,74 L220,74 Q226,68 232,74
+L300,74 L312,74 L318,52 L330,104 L340,24 L352,98 L362,74
+L404,74 L416,74 Q422,68 428,74
+L498,74 L510,74 L516,52 L528,104 L538,24 L550,98 L560,74 L600,74" />
+<path class="pleth-path" d="
+M0,138 Q30,138 44,118 Q58,98 78,118 Q92,132 110,138
+L150,138 Q180,138 194,118 Q208,98 228,118 Q242,132 260,138
+L300,138 Q330,138 344,118 Q358,98 378,118 Q392,132 410,138
+L450,138 Q480,138 494,118 Q508,98 528,118 Q542,132 560,138 L600,138" />
+</svg>
+</div>
+<h2 class="cab-title">Sim Monitor</h2>
+<p class="cab-sub">Program vitals · push live to any screen</p>
+<div class="badges">
+<span class="badge on">2 PLAYER</span>
+<span class="badge">iPAD READY</span>
+</div>
+<a class="play" href="monitor.html">PLAY ►</a>
+</div>
 
-      <!-- Shock & Induction Dosing cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee" style="text-shadow:0 0 10px var(--amber),0 0 22px var(--amber);border-color:rgba(255,214,10,.5)">INDUCTION DOSING</div>
-        <div class="screen">
-          <span class="scr-label" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">PLASMA Cp</span>
-          <span class="scr-bpm" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">mcg/mL</span>
-          <svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-            <path class="pk-path" d="M0,150 L46,150 L86,28 Q120,18 152,42 C240,96 360,128 600,142" />
-          </svg>
-        </div>
-        <h2 class="cab-title">Shock &amp; Dosing</h2>
-        <p class="cab-sub">Induction pharmacokinetics</p>
-        <div class="badges"><span class="badge">1 PLAYER</span></div>
-        <a class="play" href="shock.html">PLAY ►</a>
-      </div>
+<!-- Venous Return cabinet -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px #5ac8ff,0 0 22px #5ac8ff;border-color:rgba(90,200,255,.5)">VENOUS RETURN</div>
+<div class="screen">
+<span class="scr-label" style="color:#5ac8ff;text-shadow:0 0 8px #5ac8ff">MSFP → RAP</span>
+<span class="scr-bpm" style="color:var(--magenta);text-shadow:0 0 8px var(--magenta)">ΔP</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<path class="vessel" d="M16,124 C170,124 190,70 330,70 L600,70" />
+<path class="flow" d="M16,124 C170,124 190,70 330,70 L600,70" />
+<path class="heart-pulse" d="M548,58 c-9,-13 -30,-4 -30,11 c0,13 30,29 30,29 c0,0 30,-16 30,-29 c0,-15 -21,-24 -30,-11 z"/>
+</svg>
+</div>
+<h2 class="cab-title">Venous Return</h2>
+<p class="cab-sub">Pressure gradients &amp; preload</p>
+<div class="badges">
+<span class="badge">1 PLAYER</span>
+</div>
+<a class="play" href="venous.html">PLAY ►</a>
+</div>
 
-      <!-- DIC Simulator cabinet -->
-      <div class="cabinet">
-        <div class="cab-marquee" style="text-shadow:0 0 10px #ff5a5f,0 0 22px #ff5a5f;border-color:rgba(255,90,95,.5)">DIC SIMULATOR</div>
-        <div class="screen">
-          <span class="scr-label" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f">CLOT ⇄ BLEED</span>
-          <span class="scr-bpm" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f">PT/PTT</span>
-          <svg viewBox="0 0 300 160" preserveAspectRatio="none" aria-hidden="true">
-            <circle class="clot" cx="90"  cy="72"  r="13" style="animation-delay:0s"/>
-            <circle class="clot" cx="135" cy="104" r="10" style="animation-delay:.35s"/>
-            <circle class="clot" cx="160" cy="58"  r="15" style="animation-delay:.7s"/>
-            <circle class="clot" cx="200" cy="96"  r="11" style="animation-delay:1.05s"/>
-            <circle class="clot" cx="150" cy="118" r="8"  style="animation-delay:1.4s"/>
-            <circle class="clot" cx="225" cy="64"  r="12" style="animation-delay:1.75s"/>
-            <circle class="clot" cx="118" cy="50"  r="8"  style="animation-delay:2.1s"/>
-          </svg>
-        </div>
-        <h2 class="cab-title">DIC Simulator</h2>
-        <p class="cab-sub">Clotting vs. bleeding</p>
-        <div class="badges"><span class="badge">1 PLAYER</span></div>
-        <a class="play" href="dic.html">PLAY ►</a>
-      </div>
+<!-- Shock & Induction Dosing cabinet -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px var(--amber),0 0 22px var(--amber);border-color:rgba(255,214,10,.5)">INDUCTION DOSING</div>
+<div class="screen">
+<span class="scr-label" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">PLASMA Cp</span>
+<span class="scr-bpm" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">mcg/mL</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<path class="pk-path" d="M0,150 L46,150 L86,28 Q120,18 152,42 C240,96 360,128 600,142" />
+</svg>
+</div>
+<h2 class="cab-title">Shock &amp; Dosing</h2>
+<p class="cab-sub">Induction pharmacokinetics</p>
+<div class="badges"><span class="badge">1 PLAYER</span></div>
+<a class="play" href="shock.html">PLAY ►</a>
+</div>
 
-    </div>
-  </main>
+<!-- DIC Simulator cabinet -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px #ff5a5f,0 0 22px #ff5a5f;border-color:rgba(255,90,95,.5)">DIC SIMULATOR</div>
+<div class="screen">
+<span class="scr-label" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f">CLOT ⇄ BLEED</span>
+<span class="scr-bpm" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f">PT/PTT</span>
+<svg viewBox="0 0 300 160" preserveAspectRatio="none" aria-hidden="true">
+<circle class="clot" cx="90" cy="72" r="13" style="animation-delay:0s"/>
+<circle class="clot" cx="135" cy="104" r="10" style="animation-delay:.35s"/>
+<circle class="clot" cx="160" cy="58" r="15" style="animation-delay:.7s"/>
+<circle class="clot" cx="200" cy="96" r="11" style="animation-delay:1.05s"/>
+<circle class="clot" cx="150" cy="118" r="8" style="animation-delay:1.4s"/>
+<circle class="clot" cx="225" cy="64" r="12" style="animation-delay:1.75s"/>
+<circle class="clot" cx="118" cy="50" r="8" style="animation-delay:2.1s"/>
+</svg>
+</div>
+<h2 class="cab-title">DIC Simulator</h2>
+<p class="cab-sub">Clotting vs. bleeding</p>
+<div class="badges"><span class="badge">1 PLAYER</span></div>
+<a class="play" href="dic.html">PLAY ►</a>
+</div>
 
-  <footer>
-    <span class="more">★ MORE CARTRIDGES LOADING ★</span>
-    © 2026 <strong>FOAMfrat</strong> · continuing education for nurses &amp; EMS ·
-    <a href="https://foamfrat.com">foamfrat.com</a>
-  </footer>
+</div>
+</main>
 
-  <div class="crt" aria-hidden="true"></div>
+<footer>
+<span class="more">★ MORE CARTRIDGES LOADING ★</span>
+© 2026 <strong>FOAMfrat</strong> · continuing education for nurses &amp; EMS ·
+<a href="https://foamfrat.com">foamfrat.com</a>
+</footer>
+
+<div class="crt" aria-hidden="true"></div>
 </body>
 </html>

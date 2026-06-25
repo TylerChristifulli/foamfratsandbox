@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reentry Tachycardias — Circuit &amp; ECG Lab · FoamFrat</title>
+<style>
+  :root{
+    --bg:#0d1014; --panel:#161b22; --panel2:#1d242d; --line:#2a323d;
+    --ink:#e8edf2; --muted:#9aa7b4;
+    --accent:#f26522; --accent2:#ffa05a;
+    --trace:#5ef0a0; --good:#34c759; --bad:#ff5b5b; --blue:#4aa3ff; --purple:#b07cff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px 70px}
+  header.hero{background:linear-gradient(135deg,#1a1f27,#0d1014 65%);border-bottom:2px solid var(--accent);padding:30px 18px 24px}
+  .hero-inner{max-width:1080px;margin:0 auto}
+  .kicker{display:inline-block;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent2);font-weight:700;margin-bottom:6px}
+  h1{margin:0 0 6px;font-size:28px}
+  .sub{color:var(--muted);max-width:720px;font-size:15px}
+
+  /* rhythm selector */
+  .selector{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 16px}
+  .rbtn{border:1px solid var(--line);background:var(--panel);color:var(--muted);font-weight:700;
+    font-size:13.5px;padding:9px 15px;border-radius:10px;cursor:pointer;transition:.15s}
+  .rbtn:hover{color:var(--ink);border-color:var(--accent2)}
+  .rbtn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .rbtn small{display:block;font-weight:500;font-size:11px;opacity:.8;margin-top:1px}
+
+  /* stage */
+  .stage{display:flex;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  @media(max-width:780px){.stage{flex-direction:column}}
+  .heartbox{flex:0 0 290px;display:flex;flex-direction:column;align-items:center}
+  @media(max-width:780px){.heartbox{flex:auto}}
+  .ecgbox{flex:1;min-width:0;display:flex;flex-direction:column}
+  .panel-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 8px}
+  #heartSvg{width:100%;max-width:290px;background:#0a0d12;border:1px solid var(--line);border-radius:12px}
+  #caption{font-size:12.5px;color:var(--accent2);font-weight:600;text-align:center;margin-top:8px;min-height:18px}
+  #ecg{width:100%;height:230px;background:#080b0f;border:1px solid var(--line);border-radius:12px;display:block}
+
+  .controls{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600;font-size:13px;transition:.15s}
+  .btn:hover{border-color:var(--accent);color:var(--accent2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .speed{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+  input[type=range]{accent-color:var(--accent)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:18px;height:4px;border-radius:2px;display:inline-block}
+
+  /* readout panel */
+  .readout{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+  @media(max-width:780px){.readout{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card h3{margin:0 0 8px;font-size:15px;color:var(--accent2)}
+  .stat-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 4px}
+  .stat{flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .stat .v{font-size:14.5px;font-weight:700}
+  .card p{margin:6px 0 0;font-size:13.5px;color:#cdd6df}
+  .clue{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:#0a0d12;border-left:3px solid var(--accent);padding:9px 11px;border-radius:8px;color:#bfe;margin-top:10px}
+
+  .mgmt{margin-top:26px}
+  h2{font-size:20px;margin:0 0 4px}
+  .lead{color:var(--muted);font-size:14px;margin:0 0 14px}
+  table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+  table.cmp th,table.cmp td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  table.cmp th{background:var(--panel2);color:var(--accent2);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  table.cmp td:first-child{font-weight:700;background:#0f141a}
+  .warn{border:1px solid var(--line);border-left:3px solid var(--bad);background:rgba(255,91,91,.06);border-radius:12px;padding:14px 16px;margin-top:14px;font-size:13.5px}
+  .warn b{color:var(--bad)}
+  footer{color:var(--muted);font-size:12px;text-align:center;padding:28px 18px;border-top:1px solid var(--line);margin-top:30px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="kicker">FoamFrat Sandbox · Cardiology</span>
+    <h1>Reentry Tachycardias — Circuit &amp; ECG Lab</h1>
+    <div class="sub">Pick a rhythm. Watch the impulse travel the conduction system on the left while the matching ECG draws in real time on the right. Each lap of the circuit makes a beat — so you can <em>see</em> why each rhythm looks the way it does on the monitor.</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="selector" id="selector">
+    <button class="rbtn active" data-r="sinus">Normal Sinus <small>the reference</small></button>
+    <button class="rbtn" data-r="avnrt">AVNRT <small>AV nodal reentry</small></button>
+    <button class="rbtn" data-r="avrt">AVRT / WPW <small>accessory pathway</small></button>
+    <button class="rbtn" data-r="flutter">Atrial Flutter <small>atrial macro-reentry</small></button>
+    <button class="rbtn" data-r="vt">Reentrant VT <small>scar-based</small></button>
+  </div>
+
+  <div class="stage">
+    <div class="heartbox">
+      <div class="panel-title">Conduction system</div>
+      <svg id="heartSvg" viewBox="0 0 290 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="7" markerHeight="7" refX="4" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#ffa05a"/>
+          </marker>
+        </defs>
+        <!-- atria -->
+        <path id="atria" d="M55 55 h180 a26 26 0 0 1 26 26 v40 a26 26 0 0 1 -26 26 h-180 a26 26 0 0 1 -26 -26 v-40 a26 26 0 0 1 26 -26 Z" fill="#22303f" stroke="#33414f"/>
+        <line x1="145" y1="55" x2="145" y2="147" stroke="#0a0d12" stroke-width="3"/>
+        <text x="92" y="105" fill="#7d8a97" font-size="11" text-anchor="middle">RA</text>
+        <text x="198" y="105" fill="#7d8a97" font-size="11" text-anchor="middle">LA</text>
+        <!-- insulating annulus gap -->
+        <line x1="35" y1="150" x2="255" y2="150" stroke="#0a0d12" stroke-width="6"/>
+        <text x="145" y="164" fill="#566270" font-size="8.5" text-anchor="middle" font-style="italic">AV annulus (insulated)</text>
+        <!-- ventricles -->
+        <path id="ventricles" d="M50 175 h190 a30 30 0 0 1 30 30 v55 a40 40 0 0 1 -40 40 h-170 a40 40 0 0 1 -40 -40 v-55 a30 30 0 0 1 30 -30 Z" fill="#22303f" stroke="#33414f"/>
+        <line x1="145" y1="175" x2="145" y2="300" stroke="#0a0d12" stroke-width="3"/>
+        <text x="92" y="240" fill="#7d8a97" font-size="11" text-anchor="middle">RV</text>
+        <text x="198" y="240" fill="#7d8a97" font-size="11" text-anchor="middle">LV</text>
+
+        <!-- SA node -->
+        <circle id="sa" cx="60" cy="70" r="7" fill="#22303f" stroke="#33414f"/>
+        <text x="60" y="48" fill="#7d8a97" font-size="9" text-anchor="middle">SA</text>
+        <!-- AV node -->
+        <circle id="avn" cx="145" cy="150" r="9" fill="#22303f" stroke="#33414f"/>
+        <text x="170" y="146" fill="#7d8a97" font-size="9" text-anchor="start">AVN</text>
+        <!-- His-Purkinje -->
+        <path id="his" d="M145 159 V200 M145 200 C 110 220 95 250 95 280 M145 200 C 180 220 195 250 195 280" fill="none" stroke="#22303f" stroke-width="3" stroke-linecap="round"/>
+
+        <!-- OVERLAY: accessory pathway (AVRT/WPW) -->
+        <g id="g_accessory" style="display:none">
+          <path id="accessory" d="M236 138 C 258 150 258 165 240 178" fill="none" stroke="#f26522" stroke-width="4" marker-end="url(#arrow)"/>
+          <text x="270" y="160" fill="#f26522" font-size="8.5" text-anchor="middle">accessory<tspan x="270" dy="10">pathway</tspan></text>
+        </g>
+        <!-- OVERLAY: flutter loop -->
+        <g id="g_flutter" style="display:none">
+          <circle id="flutterRing" cx="92" cy="100" r="26" fill="none" stroke="#f26522" stroke-width="3" stroke-dasharray="3 4" opacity=".7"/>
+          <circle id="flutterDot" cx="118" cy="100" r="6" fill="#ffd27a"/>
+          <text x="92" y="103" fill="#f26522" font-size="8.5" text-anchor="middle">300/min</text>
+        </g>
+        <!-- OVERLAY: VT loop -->
+        <g id="g_vt" style="display:none">
+          <ellipse cx="105" cy="245" rx="24" ry="20" fill="#241a17" stroke="#5a3a30" stroke-dasharray="4 4"/>
+          <text x="105" y="248" fill="#c98b78" font-size="8.5" text-anchor="middle">scar</text>
+          <circle id="vtRing" cx="105" cy="245" r="34" fill="none" stroke="#f26522" stroke-width="3" stroke-dasharray="3 4" opacity=".7"/>
+          <circle id="vtDot" cx="139" cy="245" r="6" fill="#ffd27a"/>
+        </g>
+        <!-- OVERLAY: AVNRT dual loop at node -->
+        <g id="g_avnrt" style="display:none">
+          <circle id="avnrtRing" cx="145" cy="150" r="16" fill="none" stroke="#f26522" stroke-width="3" stroke-dasharray="3 3" opacity=".8"/>
+          <circle id="avnrtDot" cx="161" cy="150" r="5" fill="#ffd27a"/>
+        </g>
+      </svg>
+      <div id="caption">—</div>
+    </div>
+
+    <div class="ecgbox">
+      <div class="panel-title">Lead II rhythm strip (live)</div>
+      <canvas id="ecg"></canvas>
+      <div class="controls">
+        <button class="btn primary" id="play">⏸ Pause</button>
+        <div class="speed">Slow-mo
+          <input type="range" id="speed" min="0.15" max="1" step="0.05" value="0.5">
+          <span id="speedval" style="color:var(--accent2);font-weight:700;width:34px">0.5×</span>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="sw" style="background:#ff8a4d"></span>active depolarization</span>
+        <span><span class="sw" style="background:#22303f;border:1px solid #33414f"></span>resting tissue</span>
+        <span><span class="sw" style="background:#5ef0a0"></span>ECG trace</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="readout">
+    <div class="card">
+      <h3 id="r_name">Normal Sinus Rhythm</h3>
+      <div class="stat-row">
+        <div class="stat"><div class="k">Rate</div><div class="v" id="r_rate">—</div></div>
+        <div class="stat"><div class="k">QRS</div><div class="v" id="r_qrs">—</div></div>
+        <div class="stat"><div class="k">P waves</div><div class="v" id="r_p">—</div></div>
+      </div>
+      <p id="r_mech">—</p>
+    </div>
+    <div class="card">
+      <h3>On the monitor</h3>
+      <p id="r_look">—</p>
+      <div class="clue" id="r_clue">—</div>
+    </div>
+  </div>
+
+  <div class="mgmt">
+    <h2>Breaking the loop</h2>
+    <p class="lead">Every treatment for reentry interrupts the circuit. The whole decision hinges on one question: <em>is the AV node part of the loop, and is the patient stable?</em></p>
+    <table class="cmp">
+      <tr><th>Rhythm</th><th>AV node in the loop?</th><th>Stable first move</th><th>Unstable</th></tr>
+      <tr><td>AVNRT</td><td>Yes</td><td>Vagal → adenosine 6 mg, then 12 mg</td><td>Synchronized cardioversion</td></tr>
+      <tr><td>Orthodromic AVRT</td><td>Yes</td><td>Vagal → adenosine</td><td>Synchronized cardioversion</td></tr>
+      <tr><td>Atrial flutter</td><td>No (atrial loop)</td><td>Rate control / cardioversion; adenosine only to diagnose</td><td>Sync cardioversion (low energy)</td></tr>
+      <tr><td>WPW + AFib</td><td>Node bypassed</td><td>Procainamide; <b>avoid</b> AV-nodal blockers</td><td>Synchronized cardioversion</td></tr>
+      <tr><td>Monomorphic VT</td><td>No (ventricular loop)</td><td>Amiodarone / procainamide (stable, has pulse)</td><td>Sync cardioversion; defib if pulseless</td></tr>
+    </table>
+    <div class="warn">
+      <b>⚠ Two traps:</b> Irregular + wide + fast → think WPW with AFib; AV-nodal blockers (adenosine, diltiazem, verapamil, beta-blockers, digoxin) can trigger VF. And wide + regular in a patient with cardiac history → treat as VT until proven otherwise; verapamil can be lethal here.
+    </div>
+    <p class="lead" style="margin-top:14px;font-size:12px">Teaching tool only. Doses and drug choices follow your local protocol and current resuscitation guidelines.</p>
+  </div>
+
+</div>
+
+<footer>FoamFrat Sandbox · Reentry Tachycardias Circuit &amp; ECG Lab · For education only.</footer>
+
+<script>
+/* ===================== rhythm content ===================== */
+const RHY = {
+  sinus:{ name:"Normal Sinus Rhythm", rate:"60–100", qrs:"Narrow", p:"Upright, 1:1",
+    mech:"The SA node fires, depolarizes the atria (P wave), the impulse waits in the AV node (the only electrical connection to the ventricles), then races down the His-Purkinje system to depolarize the ventricles (QRS). One orderly trip, top to bottom — no loop.",
+    look:"Each P wave is followed by a QRS at a comfortable rate. This is your reference picture; compare every reentry rhythm below to it.",
+    clue:"Baseline: P → QRS → T, repeating. Everything else is a deviation." },
+  avnrt:{ name:"AVNRT", rate:"150–250", qrs:"Narrow", p:"Hidden / pseudo-R′",
+    mech:"Two pathways inside the AV node (slow & fast) form a tiny loop. A well-timed PAC gets the circuit spinning: down the slow path, up the fast. Atria and ventricles fire almost simultaneously, so the retrograde P hides in or just after the QRS.",
+    look:"Regular, narrow, fast, with abrupt onset/offset and no P waves you can clearly point to. Often a 'pseudo-R′' in V1 — really the buried retrograde P.",
+    clue:"AV node is IN the loop → vagal / adenosine should break it." },
+  avrt:{ name:"AVRT (orthodromic) / WPW", rate:"150–250", qrs:"Narrow", p:"Retrograde, after QRS",
+    mech:"An accessory pathway (bundle of Kent) bridges atria to ventricles outside the AV node. In orthodromic AVRT the loop runs down the AV node (narrow QRS) and back up the accessory pathway to the atria — a short-RP retrograde P after each QRS.",
+    look:"Looks like a regular narrow SVT. In sinus rhythm the same patient shows a short PR + delta wave (pre-excitation = WPW).",
+    clue:"AV node is IN the loop → adenosine usually works. But WPW + AFib (irregular, wide, fast) → NO nodal blockers." },
+  flutter:{ name:"Atrial Flutter", rate:"Atrial ~300 · ventr. ~150", qrs:"Narrow", p:"Sawtooth F waves",
+    mech:"A large reentry loop circles the right atrium (~300/min) through the cavotricuspid isthmus. The atrial loop never touches the ventricles directly — the AV node gates the impulses through, classically 2:1, giving a ventricular rate near 150.",
+    look:"Sawtooth flutter waves in II/III/aVF, a ventricular rate stuck right around 150. The atrial loop keeps spinning regardless of what the ventricles do.",
+    clue:"AV node is NOT in the loop → adenosine only slows conduction and unmasks F waves; it won't convert it." },
+  vt:{ name:"Reentrant (monomorphic) VT", rate:"~120–250", qrs:"Wide", p:"AV dissociation",
+    mech:"The circuit lives in the ventricle, looping around an area of scar (often old MI). Slow conduction through surviving fibers inside the scar lets the wavefront keep lapping. Each lap depolarizes the ventricle directly — a wide QRS — while the atria do their own thing.",
+    look:"Wide, regular, fast. The atria are dissociated (firing independently), so you may catch occasional P waves marching through at their own rate.",
+    clue:"Wide + regular + cardiac history → treat as VT. Avoid verapamil." }
+};
+
+/* ===================== waveform engine ===================== */
+const E=Math.exp;
+function mod(t,T){return ((t%T)+T)%T;}
+function g(t,c,w,a){const x=(t-c)/w;return a*E(-x*x/2);}     // gaussian bump
+function qrsN(t,c,a){ return -g(t,c-0.018,0.008,0.12*a)+g(t,c,0.010,1.0*a)-g(t,c+0.022,0.012,0.30*a); }
+function qrsW(t,c,a){ return -g(t,c-0.055,0.022,0.16*a)+g(t,c,0.034,0.95*a)+g(t,c+0.025,0.026,0.30*a)-g(t,c+0.085,0.03,0.32*a); }
+function flutterF(t){ const T=0.20; let p=mod(t,T)/T; const v=(p<0.85)?(0.5-p/0.85):(-0.5+(p-0.85)/0.15); return v*0.30; }
+
+function voltage(r,t){
+  switch(r){
+    case 'sinus':{ const T=0.86, ph=mod(t,T);
+      return g(ph,0.12,0.022,0.20)+qrsN(ph,0.34,1)+g(ph,0.56,0.05,0.30); }
+    case 'avnrt':{ const T=0.34, ph=mod(t,T);
+      return qrsN(ph,0.10,1)+g(ph,0.135,0.012,0.16)+g(ph,0.24,0.045,0.22); }
+    case 'avrt':{ const T=0.36, ph=mod(t,T);
+      return qrsN(ph,0.09,1)-g(ph,0.17,0.016,0.16)+g(ph,0.26,0.045,0.22); }
+    case 'flutter':{ return flutterF(t)+qrsN(mod(t,0.40),0.12,0.88); }
+    case 'vt':{ const T=0.38, ph=mod(t,T);
+      return qrsW(ph,0.16,1)+g(ph,0.31,0.06,-0.34); }
+  }
+  return 0;
+}
+
+/* ===================== ECG canvas ===================== */
+const cv=document.getElementById('ecg'), ctx=cv.getContext('2d');
+let dpr=window.devicePixelRatio||1;
+function fitCanvas(){ const W=cv.clientWidth,H=cv.clientHeight; cv.width=W*dpr; cv.height=H*dpr; }
+window.addEventListener('resize',()=>{dpr=window.devicePixelRatio||1;fitCanvas();});
+
+function drawGrid(W,H){
+  ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(255,120,90,0.06)';
+  for(let x=0;x<=W;x+=10){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<=H;y+=10){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.strokeStyle='rgba(255,120,90,0.13)';
+  for(let x=0;x<=W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<=H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+function drawECG(){
+  const W=cv.clientWidth,H=cv.clientHeight;
+  if(cv.width!==Math.round(W*dpr)) fitCanvas();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  drawGrid(W,H);
+  const mid=H*0.58, scale=H*0.34, pps=165;
+  ctx.beginPath();
+  // oversample in x (sub-pixel) so the narrow QRS peak is captured consistently → no flicker
+  const step=0.25; let started=false;
+  for(let x=0;x<=W;x+=step){
+    const ts=simTime-(W-x)/pps;
+    const y=mid - voltage(current,ts)*scale;
+    if(!started){ctx.moveTo(x,y); started=true;} else ctx.lineTo(x,y);
+  }
+  ctx.strokeStyle='#5ef0a0'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.shadowColor='rgba(94,240,160,.5)'; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+  // leading edge
+  ctx.fillStyle='#5ef0a0';
+  const ey=mid-voltage(current,simTime)*scale;
+  ctx.beginPath(); ctx.arc(W-1,ey,3,0,7); ctx.fill();
+}
+
+/* ===================== heart sync ===================== */
+const DIM=[34,48,63], HOT=[255,140,77];
+function rgb(a){return `rgb(${a[0]|0},${a[1]|0},${a[2]|0})`;}
+function lerp(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+function pulseS(t,c,w,T){let d=Math.abs(mod(t,T)-c); d=Math.min(d,T-d); return E(-(d*d)/(2*w*w));}
+const $=id=>document.getElementById(id);
+function paint(el,k){ if(el) el.setAttribute('fill', rgb(lerp(DIM,HOT,Math.min(1,k)))); }
+function paintStroke(el,k){ if(el){ el.setAttribute('stroke', rgb(lerp(DIM,HOT,Math.min(1,k)))); el.setAttribute('stroke-width',(3+k*2).toFixed(1)); } }
+function show(el,on){ if(el) el.style.display=on?'':'none'; }
+
+const els={atria:$('atria'),vent:$('ventricles'),sa:$('sa'),avn:$('avn'),his:$('his')};
+function setOverlays(r){
+  show($('g_accessory'),r==='avrt');
+  show($('g_flutter'),r==='flutter');
+  show($('g_vt'),r==='vt');
+  show($('g_avnrt'),r==='avnrt');
+}
+function dotOnCircle(dot,cx,cy,rad,ang){ dot.setAttribute('cx',cx+rad*Math.cos(ang)); dot.setAttribute('cy',cy+rad*Math.sin(ang)); }
+
+function updateHeart(){
+  const r=current; let cap='';
+  let ka=0,kn=0,kv=0,ks=0,kh=0;
+  if(r==='sinus'){ const T=0.86;
+    ks=pulseS(simTime,0.04,0.03,T); ka=pulseS(simTime,0.12,0.05,T);
+    kn=pulseS(simTime,0.26,0.05,T); kh=pulseS(simTime,0.33,0.04,T); kv=pulseS(simTime,0.37,0.06,T);
+    cap = ka>.4?'Atrial depolarization (P)': kv>.4?'Ventricular depolarization (QRS)': kn>.3?'AV node delay':'';
+  }
+  else if(r==='avnrt'){ const T=0.34;
+    ka=pulseS(simTime,0.10,0.04,T); kv=pulseS(simTime,0.10,0.04,T); kn=0.5+0.5*Math.sin(simTime*2*Math.PI/T*2);
+    dotOnCircle($('avnrtDot'),145,150,16, simTime*2*Math.PI/T*2);
+    $('avnrtRing').setAttribute('opacity',(0.55+0.4*Math.abs(Math.sin(simTime*2*Math.PI/T*2))).toFixed(2));
+    cap='Slow–fast loop in the AV node';
+  }
+  else if(r==='avrt'){ const T=0.36;
+    kv=pulseS(simTime,0.09,0.04,T); kn=pulseS(simTime,0.04,0.04,T); ka=pulseS(simTime,0.17,0.045,T);
+    const kacc=pulseS(simTime,0.13,0.04,T);
+    paintStroke($('accessory'),kacc);
+    cap = kv>.4?'Down AV node → ventricles': ka>.4?'Up accessory pathway → atria':'Reentry loop';
+  }
+  else if(r==='flutter'){ const Tf=0.20, Tq=0.40;
+    ka=0.45+0.45*Math.abs(Math.sin(simTime*Math.PI/Tf));
+    kv=pulseS(simTime,0.12,0.05,Tq); kn=kv;
+    dotOnCircle($('flutterDot'),92,100,26, -simTime*2*Math.PI/Tf);
+    $('flutterRing').setAttribute('opacity',(0.55+0.4*Math.abs(Math.sin(simTime*Math.PI/Tf))).toFixed(2));
+    cap='Atrial loop ~300/min · 2:1 to ventricles';
+  }
+  else if(r==='vt'){ const T=0.38, Ta=0.86;
+    kv=pulseS(simTime,0.16,0.06,T); ka=pulseS(simTime,0.12,0.05,Ta); // independent atria (dissociation)
+    dotOnCircle($('vtDot'),105,245,34, simTime*2*Math.PI/T);
+    $('vtRing').setAttribute('opacity',(0.55+0.4*Math.abs(Math.sin(simTime*2*Math.PI/T))).toFixed(2));
+    cap = kv>.4?'Ventricular reentry (wide QRS)':'Atria firing independently';
+  }
+  paint(els.atria,ka); paint(els.vent,kv); paint(els.sa,ks); paint(els.avn,kn); paintStroke(els.his,kh||kv*0.7);
+  $('caption').textContent=cap;
+}
+
+/* ===================== loop & controls ===================== */
+let current='sinus', simTime=0, last=null, playing=true, speed=0.5;
+function frame(now){
+  if(last==null)last=now;
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(playing) simTime+=dt*speed;
+  drawECG(); updateHeart();
+  requestAnimationFrame(frame);
+}
+
+function applyContent(r){
+  const c=RHY[r];
+  $('r_name').textContent=c.name; $('r_rate').textContent=c.rate;
+  $('r_qrs').textContent=c.qrs; $('r_p').textContent=c.p;
+  $('r_mech').textContent=c.mech; $('r_look').textContent=c.look; $('r_clue').textContent=c.clue;
+}
+function selectRhythm(r){
+  current=r; setOverlays(r); applyContent(r);
+  document.querySelectorAll('.rbtn').forEach(b=>b.classList.toggle('active',b.dataset.r===r));
+}
+document.getElementById('selector').addEventListener('click',e=>{
+  const b=e.target.closest('.rbtn'); if(b) selectRhythm(b.dataset.r);
+});
+document.getElementById('play').addEventListener('click',function(){
+  playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; last=null;
+});
+document.getElementById('speed').addEventListener('input',e=>{
+  speed=parseFloat(e.target.value); $('speedval').textContent=speed.toFixed(2).replace(/0$/,'')+'×';
+});
+
+fitCanvas(); selectRhythm('sinus'); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
