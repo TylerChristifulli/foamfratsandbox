@@ -164,6 +164,7 @@
           <input type="range" id="speed" min="0.15" max="1" step="0.05" value="0.5">
           <span id="speedval" style="color:var(--accent2);font-weight:700;width:34px">0.5×</span>
         </div>
+        <button class="btn" id="avrtToggle" style="display:none">↻ Switch to Antidromic</button>
       </div>
       <div class="legend">
         <span><span class="sw" style="background:#ff8a4d"></span>active depolarization</span>
@@ -226,6 +227,10 @@ const RHY = {
     mech:"An accessory pathway (bundle of Kent) bridges atria to ventricles outside the AV node. In orthodromic AVRT the loop runs down the AV node (narrow QRS) and back up the accessory pathway to the atria — a short-RP retrograde P after each QRS.",
     look:"Looks like a regular narrow SVT. In sinus rhythm the same patient shows a short PR + delta wave (pre-excitation = WPW).",
     clue:"AV node is IN the loop → adenosine usually works. But WPW + AFib (irregular, wide, fast) → NO nodal blockers." },
+  avrtAnti:{ name:"AVRT (antidromic) / WPW", rate:"150–250", qrs:"Wide", p:"Retrograde",
+    mech:"Antidromic AVRT runs the same circuit the other way: antegrade DOWN the accessory pathway, so the ventricle is depolarized muscle-to-muscle (wide QRS, like one big delta wave), then retrograde UP the AV node back to the atria. Only ~5% of AVRT.",
+    look:"Wide, regular, and fast — it looks just like ventricular tachycardia. The tip-off is a known accessory pathway or prior WPW pattern in sinus.",
+    clue:"Wide + regular → treat as VT until proven otherwise. If WPW + AFib is on the table, NO AV-nodal blockers." },
   flutter:{ name:"Atrial Flutter", rate:"Atrial ~300 · ventr. ~150", qrs:"Narrow", p:"Sawtooth F waves",
     mech:"A large reentry loop circles the right atrium (~300/min) through the cavotricuspid isthmus. The atrial loop never touches the ventricles directly — the AV node gates the impulses through, classically 2:1, giving a ventricular rate near 150.",
     look:"Sawtooth flutter waves in II/III/aVF, a ventricular rate stuck right around 150. The atrial loop keeps spinning regardless of what the ventricles do.",
@@ -251,6 +256,7 @@ function voltage(r,t){
     case 'avnrt':{ const T=0.34, ph=mod(t,T);
       return qrsN(ph,0.10,1)+g(ph,0.135,0.012,0.16)+g(ph,0.24,0.045,0.22); }
     case 'avrt':{ const T=0.36, ph=mod(t,T);
+      if(avrtMode==='anti') return qrsW(ph,0.10,1)-g(ph,0.215,0.018,0.14)+g(ph,0.31,0.055,-0.24);
       return qrsN(ph,0.09,1)-g(ph,0.17,0.016,0.16)+g(ph,0.26,0.045,0.22); }
     case 'flutter':{ return flutterF(t)+qrsN(mod(t,0.40),0.12,0.88); }
     case 'vt':{ const T=0.38, ph=mod(t,T);
@@ -331,10 +337,19 @@ function updateHeart(){
     cap='Slow–fast loop in the AV node';
   }
   else if(r==='avrt'){ const T=0.36;
-    kv=pulseS(simTime,0.09,0.04,T); kn=pulseS(simTime,0.04,0.04,T); ka=pulseS(simTime,0.17,0.045,T);
-    const kacc=pulseS(simTime,0.13,0.04,T);
-    paintStroke($('accessory'),kacc);
-    cap = kv>.4?'Down AV node → ventricles': ka>.4?'Up accessory pathway → atria':'Reentry loop';
+    if(avrtMode==='anti'){
+      const kacc=pulseS(simTime,0.04,0.04,T);   // antegrade DOWN accessory pathway
+      kv=pulseS(simTime,0.10,0.06,T);           // ventricle via accessory (wide)
+      kn=pulseS(simTime,0.17,0.045,T);          // retrograde UP AV node
+      ka=pulseS(simTime,0.23,0.05,T);           // atria last
+      paintStroke($('accessory'),kacc);
+      cap = kacc>.4?'Down accessory pathway → ventricles (wide)': ka>.4?'Up AV node → atria':'Antidromic loop';
+    } else {
+      kv=pulseS(simTime,0.09,0.04,T); kn=pulseS(simTime,0.04,0.04,T); ka=pulseS(simTime,0.17,0.045,T);
+      const kacc=pulseS(simTime,0.13,0.04,T);
+      paintStroke($('accessory'),kacc);
+      cap = kv>.4?'Down AV node → ventricles': ka>.4?'Up accessory pathway → atria':'Orthodromic loop';
+    }
   }
   else if(r==='flutter'){ const Tf=0.20, Tq=0.40;
     ka=0.45+0.45*Math.abs(Math.sin(simTime*Math.PI/Tf));
@@ -354,7 +369,10 @@ function updateHeart(){
 }
 
 /* ===================== loop & controls ===================== */
-let current='sinus', simTime=0, last=null, playing=true, speed=0.5;
+let current='sinus', avrtMode='ortho', simTime=0, last=null, playing=true, speed=0.5;
+// accessory-pathway arrow: points toward the atria (retrograde, ortho) or toward the ventricle (antegrade, anti)
+const ACC_UP="M240 178 C 258 165 258 150 236 138";   // arrowhead at atria
+const ACC_DOWN="M236 138 C 258 150 258 165 240 178"; // arrowhead at ventricle
 function frame(now){
   if(last==null)last=now;
   const dt=Math.min(0.05,(now-last)/1000); last=now;
@@ -364,17 +382,27 @@ function frame(now){
 }
 
 function applyContent(r){
-  const c=RHY[r];
+  const c=(r==='avrt'&&avrtMode==='anti')?RHY.avrtAnti:RHY[r];
   $('r_name').textContent=c.name; $('r_rate').textContent=c.rate;
   $('r_qrs').textContent=c.qrs; $('r_p').textContent=c.p;
   $('r_mech').textContent=c.mech; $('r_look').textContent=c.look; $('r_clue').textContent=c.clue;
 }
+function syncAvrtUI(){
+  const t=$('avrtToggle');
+  t.style.display = current==='avrt' ? '' : 'none';
+  t.textContent = avrtMode==='anti' ? '↻ Switch to Orthodromic' : '↻ Switch to Antidromic';
+  $('accessory').setAttribute('d', avrtMode==='anti' ? ACC_DOWN : ACC_UP);
+}
 function selectRhythm(r){
-  current=r; setOverlays(r); applyContent(r);
+  current=r; setOverlays(r); applyContent(r); syncAvrtUI();
   document.querySelectorAll('.rbtn').forEach(b=>b.classList.toggle('active',b.dataset.r===r));
 }
 document.getElementById('selector').addEventListener('click',e=>{
   const b=e.target.closest('.rbtn'); if(b) selectRhythm(b.dataset.r);
+});
+document.getElementById('avrtToggle').addEventListener('click',()=>{
+  avrtMode = avrtMode==='anti' ? 'ortho' : 'anti';
+  applyContent('avrt'); syncAvrtUI();
 });
 document.getElementById('play').addEventListener('click',function(){
   playing=!playing; this.textContent=playing?'⏸ Pause':'▶ Play'; last=null;
