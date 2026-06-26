@@ -743,9 +743,12 @@ function runMonitor(){
     }
     if(x<plB){                                        // phase III: gently up-sloping alveolar plateau
       const u=(x-upB)/(plB-upB);
-      return et*(0.92+0.08*u);                        // rises to the end-tidal peak (= EtCO2) at plateau end
+      return et*(0.92+0.08*(1-(1-u)*(1-u)));           // ease-out → slope flattens to 0 at the end-tidal peak
     }
-    if(x<dnB) return et*(1-(x-plB)/(dnB-plB));         // fast inspiratory downstroke → baseline
+    if(x<dnB){                                         // fast inspiratory downstroke (rounded peak)
+      const u=(x-plB)/(dnB-plB);
+      return et*(1-u*u);                               // ease-in → starts flat at the peak then steepens
+    }
     return 0;                                          // baseline until next breath
   }
 
