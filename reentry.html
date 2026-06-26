@@ -286,6 +286,8 @@ function mod(t,T){return ((t%T)+T)%T;}
 function g(t,c,w,a){const x=(t-c)/w;return a*E(-x*x/2);}     // gaussian bump
 function qrsN(t,c,a){ return -g(t,c-0.018,0.008,0.12*a)+g(t,c,0.010,1.0*a)-g(t,c+0.022,0.012,0.30*a); }
 function qrsW(t,c,a){ return -g(t,c-0.055,0.022,0.16*a)+g(t,c,0.034,0.95*a)+g(t,c+0.025,0.026,0.30*a)-g(t,c+0.085,0.03,0.32*a); }
+// broad, slurred wide complex (one big pre-excited / delta-wave-like deflection)
+function qrsDelta(t,c,a){ return -g(t,c-0.085,0.02,0.06*a)+g(t,c-0.05,0.05,0.34*a)+g(t,c,0.055,0.70*a)+g(t,c+0.055,0.05,0.36*a)-g(t,c+0.125,0.05,0.42*a); }
 function flutterF(t){ const T=0.20; let p=mod(t,T)/T; const v=(p<0.85)?(0.5-p/0.85):(-0.5+(p-0.85)/0.15); return v*0.30; }
 
 function voltage(r,t){
@@ -295,7 +297,7 @@ function voltage(r,t){
     case 'avnrt':{ const T=0.34, ph=mod(t,T);
       return qrsN(ph,0.10,1)+g(ph,0.135,0.012,0.16)+g(ph,0.24,0.045,0.22); }
     case 'avrt':{ const T=0.36, ph=mod(t,T);
-      if(avrtMode==='anti') return qrsW(ph,0.10,1)-g(ph,0.215,0.018,0.14)+g(ph,0.31,0.055,-0.24);
+      if(avrtMode==='anti') return qrsDelta(ph,0.12,1)+g(ph,0.33,0.07,-0.28);
       return qrsN(ph,0.09,1)-g(ph,0.17,0.016,0.16)+g(ph,0.26,0.045,0.22); }
     case 'flutter':{ return flutterF(t)+qrsN(mod(t,0.40),0.12,0.88); }
     case 'vt':{ const T=0.38, ph=mod(t,T);
