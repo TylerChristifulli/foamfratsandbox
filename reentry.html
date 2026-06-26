@@ -38,7 +38,7 @@
   @media(max-width:780px){.heartbox{flex:auto}}
   .ecgbox{flex:1;min-width:0;display:flex;flex-direction:column}
   .panel-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 8px}
-  #heartSvg{width:100%;max-width:290px;background:#0a0d12;border:1px solid var(--line);border-radius:12px}
+  #heartSvg{width:100%;max-width:290px;background:#07120d;border:1px solid #18402f;border-radius:12px}
   #caption{font-size:12.5px;color:var(--accent2);font-weight:600;text-align:center;margin-top:8px;min-height:18px}
   #ecg{width:100%;height:230px;background:#080b0f;border:1px solid var(--line);border-radius:12px;display:block}
 
@@ -105,28 +105,67 @@
             <path d="M0,0 L6,3 L0,6 Z" fill="#ffa05a"/>
           </marker>
         </defs>
-        <!-- atria -->
-        <path id="atria" d="M55 55 h180 a26 26 0 0 1 26 26 v40 a26 26 0 0 1 -26 26 h-180 a26 26 0 0 1 -26 -26 v-40 a26 26 0 0 1 26 -26 Z" fill="#22303f" stroke="#33414f"/>
-        <line x1="145" y1="55" x2="145" y2="147" stroke="#0a0d12" stroke-width="3"/>
-        <text x="92" y="105" fill="#7d8a97" font-size="11" text-anchor="middle">RA</text>
-        <text x="198" y="105" fill="#7d8a97" font-size="11" text-anchor="middle">LA</text>
-        <!-- insulating annulus gap -->
-        <line x1="35" y1="150" x2="255" y2="150" stroke="#0a0d12" stroke-width="6"/>
-        <text x="145" y="164" fill="#566270" font-size="8.5" text-anchor="middle" font-style="italic">AV annulus (insulated)</text>
-        <!-- ventricles -->
-        <path id="ventricles" d="M50 175 h190 a30 30 0 0 1 30 30 v55 a40 40 0 0 1 -40 40 h-170 a40 40 0 0 1 -40 -40 v-55 a30 30 0 0 1 30 -30 Z" fill="#22303f" stroke="#33414f"/>
-        <line x1="145" y1="175" x2="145" y2="300" stroke="#0a0d12" stroke-width="3"/>
-        <text x="92" y="240" fill="#7d8a97" font-size="11" text-anchor="middle">RV</text>
-        <text x="198" y="240" fill="#7d8a97" font-size="11" text-anchor="middle">LV</text>
+        <!-- ===== PCB board backdrop ===== -->
+        <rect x="14" y="42" width="262" height="268" rx="16" fill="#0a1712" stroke="#18402f" stroke-width="1.5"/>
+        <g stroke="#1c5743" stroke-width="1.3" fill="none" opacity="0.5" stroke-linecap="round">
+          <path d="M22 60 H34 V92"/>
+          <path d="M268 70 H256 V110 H242"/>
+          <path d="M22 122 H30 V158"/>
+          <path d="M22 250 H34 V292 H70"/>
+          <path d="M268 250 H256 V296"/>
+        </g>
+        <g fill="#2b7a60" opacity="0.7">
+          <circle cx="22" cy="60" r="2"/><circle cx="34" cy="92" r="2"/>
+          <circle cx="268" cy="70" r="2"/><circle cx="242" cy="110" r="2"/>
+          <circle cx="22" cy="122" r="2"/><circle cx="30" cy="158" r="2"/>
+          <circle cx="22" cy="250" r="2"/><circle cx="70" cy="292" r="2"/>
+          <circle cx="268" cy="250" r="2"/><circle cx="256" cy="296" r="2"/>
+        </g>
 
-        <!-- SA node -->
-        <circle id="sa" cx="60" cy="70" r="7" fill="#22303f" stroke="#33414f"/>
-        <text x="60" y="48" fill="#7d8a97" font-size="9" text-anchor="middle">SA</text>
-        <!-- AV node -->
+        <!-- ===== atria (board zone) ===== -->
+        <path id="atria" d="M55 55 h180 a26 26 0 0 1 26 26 v40 a26 26 0 0 1 -26 26 h-180 a26 26 0 0 1 -26 -26 v-40 a26 26 0 0 1 26 -26 Z" fill="#22303f" stroke="#2c8268" stroke-width="1.5"/>
+        <line x1="145" y1="58" x2="145" y2="145" stroke="#0c1a14" stroke-width="2.5"/>
+        <text x="92" y="105" fill="#8fa39b" font-size="11" text-anchor="middle">RA</text>
+        <text x="198" y="105" fill="#8fa39b" font-size="11" text-anchor="middle">LA</text>
+        <g fill="#0a1712" stroke="#caa24e" stroke-width="1.4">
+          <circle cx="44" cy="66" r="2.6"/><circle cx="246" cy="66" r="2.6"/>
+          <circle cx="44" cy="136" r="2.6"/><circle cx="246" cy="136" r="2.6"/>
+        </g>
+
+        <!-- insulated AV annulus (isolation slot) -->
+        <line x1="34" y1="150" x2="256" y2="150" stroke="#05100b" stroke-width="7"/>
+        <line x1="34" y1="150" x2="256" y2="150" stroke="#1c5743" stroke-width="1" stroke-dasharray="2 5" opacity="0.8"/>
+        <text x="34" y="168" fill="#6f8a82" font-size="7.5" text-anchor="start" font-style="italic">insulated annulus</text>
+
+        <!-- ===== ventricles (board zone) ===== -->
+        <path id="ventricles" d="M50 175 h190 a30 30 0 0 1 30 30 v55 a40 40 0 0 1 -40 40 h-170 a40 40 0 0 1 -40 -40 v-55 a30 30 0 0 1 30 -30 Z" fill="#22303f" stroke="#2c8268" stroke-width="1.5"/>
+        <line x1="145" y1="178" x2="145" y2="298" stroke="#0c1a14" stroke-width="2.5"/>
+        <text x="92" y="240" fill="#8fa39b" font-size="11" text-anchor="middle">RV</text>
+        <text x="198" y="240" fill="#8fa39b" font-size="11" text-anchor="middle">LV</text>
+        <g fill="#0a1712" stroke="#caa24e" stroke-width="1.4">
+          <circle cx="40" cy="188" r="2.6"/><circle cx="250" cy="188" r="2.6"/>
+          <circle cx="34" cy="270" r="2.6"/><circle cx="256" cy="270" r="2.6"/>
+        </g>
+
+        <!-- the ONLY conductive bridge across the annulus: the AV node -->
+        <path d="M145 143 V157" stroke="#caa24e" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+
+        <!-- SA node (solder pad) -->
+        <path d="M60 70 H92" stroke="#caa24e" stroke-width="2" fill="none" opacity="0.85"/>
+        <circle cx="60" cy="70" r="11" fill="none" stroke="#caa24e" stroke-width="2"/>
+        <circle id="sa" cx="60" cy="70" r="6.5" fill="#22303f" stroke="#33414f"/>
+        <text x="60" y="46" fill="#9fb8b0" font-size="9" text-anchor="middle">SA</text>
+
+        <!-- AV node (component pad) -->
+        <rect x="130" y="135" width="30" height="30" rx="6" fill="#0c1a14" stroke="#caa24e" stroke-width="2"/>
         <circle id="avn" cx="145" cy="150" r="9" fill="#22303f" stroke="#33414f"/>
-        <text x="170" y="146" fill="#7d8a97" font-size="9" text-anchor="start">AVN</text>
-        <!-- His-Purkinje -->
+        <text x="176" y="140" fill="#9fb8b0" font-size="9" text-anchor="start">AVN</text>
+
+        <!-- His-Purkinje (traces + solder joints) -->
         <path id="his" d="M145 159 V200 M145 200 C 110 220 95 250 95 280 M145 200 C 180 220 195 250 195 280" fill="none" stroke="#22303f" stroke-width="3" stroke-linecap="round"/>
+        <g fill="#caa24e">
+          <circle cx="145" cy="200" r="2.6"/><circle cx="95" cy="280" r="2.6"/><circle cx="195" cy="280" r="2.6"/>
+        </g>
 
         <!-- OVERLAY: accessory pathway (AVRT/WPW) -->
         <g id="g_accessory" style="display:none">
