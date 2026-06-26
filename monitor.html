@@ -733,11 +733,20 @@ function runMonitor(){
     if(!active.co2) return null;            // channel not activated
     if(STATE.rr<1) return 0;
     const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
-    if(x<0.20) return 0;                          // inspiratory baseline
-    if(x<0.40) return et*((x-0.20)/0.20);         // gentler expiratory upstroke (phase II)
-    if(x<0.82) return et*(0.95+0.05*((x-0.40)/0.42)); // alveolar plateau (slight rise)
-    if(x<0.90) return et*Math.max(0,1-(x-0.82)/0.08); // downstroke
-    return 0;
+    // Realistic capnogram. Phase boundaries as fractions of the breath cycle.
+    // Expiration runs 0.30→0.78 (~48%) — shorter/more compact than before.
+    const upA=0.30, upB=0.37, plB=0.72, dnB=0.78;
+    if(x<upA) return 0;                               // phase I: inspiratory baseline
+    if(x<upB){                                        // phase II: steep upstroke w/ rounded shoulder
+      const u=(x-upA)/(upB-upA);                      // 0..1
+      return et*0.92*(1-(1-u)*(1-u));                 // ease-out → fast rise that rounds into plateau
+    }
+    if(x<plB){                                        // phase III: gently up-sloping alveolar plateau
+      const u=(x-upB)/(plB-upB);
+      return et*(0.92+0.08*u);                        // rises to the end-tidal peak (= EtCO2) at plateau end
+    }
+    if(x<dnB) return et*(1-(x-plB)/(dnB-plB));         // fast inspiratory downstroke → baseline
+    return 0;                                          // baseline until next breath
   }
 
   let beep=null;
