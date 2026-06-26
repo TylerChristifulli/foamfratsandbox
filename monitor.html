@@ -709,9 +709,21 @@ function runMonitor(){
     if(noPulse()||STATE.spo2<1) return 0;
     const period=60/effRate();
     const x=(plethPhase%period)/period;
-    let y=Math.exp(-Math.pow((x-0.18)/0.13,2))*1.0 + Math.exp(-Math.pow((x-0.42)/0.10,2))*0.35;
+    // Continuous pleth: rounded foot, sharp systolic peak, dicrotic notch as an
+    // inflection on a continuously falling limb, and a diastolic runoff that decays
+    // straight into the next beat (trough stays elevated — no flat baseline).
+    let y;
+    if(x<0.13){                              // anacrotic upstroke (rounded foot → sharp peak)
+      const u=x/0.13; y=0.15+0.85*u*u;
+    }else if(x<0.42){                        // systolic decline toward the dicrotic notch
+      const u=(x-0.13)/0.29; y=1.0-0.55*u*(2-u);
+    }else if(x<0.56){                        // dicrotic wave (small secondary rise)
+      const u=(x-0.42)/0.14; y=0.45+0.12*Math.sin(Math.PI*u);
+    }else{                                   // diastolic runoff into the next foot
+      const u=(x-0.56)/0.44; y=0.45-0.30*(u*u*(3-2*u));
+    }
     const perf=(STATE.perfusion==null?100:STATE.perfusion)/100;   // low perfusion damps amplitude
-    return Math.min(y,1.1)*(STATE.spo2/100)*perf;
+    return y*(STATE.spo2/100)*perf;
   }
 
   // ART arterial pressure (mmHg) — only when an A-line is placed
