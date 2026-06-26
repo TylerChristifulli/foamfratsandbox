@@ -713,10 +713,10 @@ function runMonitor(){
     // inflection on a continuously falling limb, and a diastolic runoff that decays
     // straight into the next beat (trough stays elevated — no flat baseline).
     let y;
-    if(x<0.13){                              // anacrotic upstroke (rounded foot → sharp peak)
-      const u=x/0.13; y=0.15+0.85*u*u;
+    if(x<0.13){                              // anacrotic upstroke (rounded foot, domed peak)
+      const u=x/0.13; y=0.15+0.85*(u*u*(3-2*u));
     }else if(x<0.42){                        // systolic decline toward the dicrotic notch
-      const u=(x-0.13)/0.29; y=1.0-0.55*u*(2-u);
+      const u=(x-0.13)/0.29; y=1.0-0.55*(u*u*(3-2*u));
     }else if(x<0.56){                        // dicrotic wave (small secondary rise)
       const u=(x-0.42)/0.14; y=0.45+0.12*Math.sin(Math.PI*u);
     }else{                                   // diastolic runoff into the next foot
