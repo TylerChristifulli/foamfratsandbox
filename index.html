@@ -328,6 +328,14 @@ animation:hb 1.05s ease-in-out infinite;
 /* sim monitor multi-trace */
 .pleth-path{fill:none;stroke:var(--amber);stroke-width:2.2;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.4s linear infinite}
 
+/* dispatch code trainer */
+.dcode{font-family:"Press Start 2P",monospace;font-size:38px;fill:var(--amber);filter:drop-shadow(0 0 10px rgba(255,214,10,.8))}
+.dcode-a{animation:codeA 3.2s steps(1) infinite}
+.dcode-b{fill:#ff5a5f;filter:drop-shadow(0 0 10px rgba(255,90,95,.8));animation:codeB 3.2s steps(1) infinite}
+.dcode-tag{font-family:"VT323",monospace;font-size:20px;fill:var(--dim)}
+@keyframes codeA{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes codeB{0%,49%{opacity:0}50%,100%{opacity:1}}
+
 footer{
 position:relative;
 z-index:10;
@@ -439,6 +447,27 @@ L450,138 Q480,138 494,118 Q508,98 528,118 Q542,132 560,138 L600,138" />
 <span class="badge">iPAD READY</span>
 </div>
 <a class="play" href="monitor.html">PLAY ►</a>
+</div>
+
+<!-- Dispatch Code Trainer cabinet -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px var(--amber),0 0 22px var(--amber);border-color:rgba(255,214,10,.5)">DISPATCH CODE</div>
+<div class="screen">
+<span class="scr-label" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">PROTO 10 · KQ</span>
+<span class="scr-bpm" style="color:var(--cyan);text-shadow:0 0 8px var(--cyan)">MPDS</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<text class="dcode dcode-a" x="300" y="96" text-anchor="middle">10-C-2</text>
+<text class="dcode dcode-b" x="300" y="96" text-anchor="middle">10-D-4</text>
+<text class="dcode-tag" x="300" y="136" text-anchor="middle">"he's pale and sweaty..."</text>
+</svg>
+</div>
+<h2 class="cab-title">Dispatch Code Trainer</h2>
+<p class="cab-sub">Work the call · lock the determinant</p>
+<div class="badges">
+<span class="badge">1 PLAYER</span>
+<span class="badge on">36 PROTOCOLS</span>
+</div>
+<a class="play" href="dispatch-code-trainer.html">PLAY ►</a>
 </div>
 
 <!-- Venous Return cabinet -->
