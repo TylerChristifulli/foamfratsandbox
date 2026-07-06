@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dispatch Code Trainer — Priority Dispatch Simulator</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --panel2:#1e2739; --line:#2a3550;
+    --text:#e8ecf5; --muted:#9aa7c0; --accent:#4da3ff;
+    --omega:#8b93a7; --alpha:#3ec97e; --bravo:#e8c541; --charlie:#f2913d; --delta:#e8524a; --echo:#c04df2;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh;}
+  header{padding:22px 28px 14px; border-bottom:1px solid var(--line);}
+  header h1{font-size:1.35rem; font-weight:700; letter-spacing:.3px;}
+  header p{color:var(--muted); font-size:.85rem; margin-top:4px; max-width:900px;}
+  .wrap{display:grid; grid-template-columns:270px 1fr 320px; gap:0; min-height:calc(100vh - 90px);}
+  @media(max-width:1100px){ .wrap{grid-template-columns:1fr;} .sidebar,.teach{border-right:none; border-bottom:1px solid var(--line);} }
+
+  /* protocol list */
+  .sidebar{border-right:1px solid var(--line); padding:16px; overflow-y:auto;}
+  .sidebar h2, .teach h2{font-size:.72rem; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:10px;}
+  .proto{display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:1px solid transparent; border-radius:8px; padding:9px 10px; color:var(--text); cursor:pointer; font-size:.87rem; margin-bottom:3px;}
+  .proto:hover{background:var(--panel2);}
+  .proto.active{background:var(--panel2); border-color:var(--accent);}
+  .proto .num{font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:700; color:var(--accent); width:26px; flex:none;}
+
+  /* main */
+  .main{padding:20px 26px; overflow-y:auto;}
+  .codebox{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 22px; margin-bottom:18px; display:flex; align-items:center; gap:22px; flex-wrap:wrap;}
+  .bigcode{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:3rem; font-weight:800; letter-spacing:2px;}
+  .codemeta{flex:1; min-width:220px;}
+  .codemeta .spoken{font-size:1.05rem; font-weight:600;}
+  .codemeta .desc{color:var(--muted); font-size:.88rem; margin-top:3px;}
+  .lvlchip{display:inline-block; padding:3px 12px; border-radius:20px; font-size:.78rem; font-weight:700; color:#0f1420; margin-top:8px;}
+  .placeholder{color:var(--muted); font-size:1rem;}
+
+  .hint{color:var(--muted); font-size:.82rem; margin-bottom:14px;}
+  .lvlgroup{margin-bottom:16px;}
+  .lvlhead{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+  .lvlhead .dot{width:12px; height:12px; border-radius:50%;}
+  .lvlhead .name{font-weight:700; font-size:.92rem;}
+  .lvlhead .sub{color:var(--muted); font-size:.78rem;}
+  .det{display:flex; align-items:flex-start; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:10px 12px; margin-bottom:6px; cursor:pointer; transition:border-color .12s;}
+  .det:hover{border-color:#3d4d75;}
+  .det input{margin-top:3px; accent-color:var(--accent); width:15px; height:15px; flex:none;}
+  .det .lbl{font-size:.89rem; line-height:1.35;}
+  .det .code{font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--muted); font-size:.78rem; margin-left:6px;}
+  .det.controlling{border-color:currentColor;}
+  .det.controlling .lbl::after{content:" ← determines the code"; font-size:.75rem; font-weight:700;}
+  .clearbtn{background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 14px; font-size:.82rem; cursor:pointer; margin-bottom:16px;}
+  .clearbtn:hover{border-color:var(--accent);}
+
+  /* guided mode */
+  .modebar{display:flex; gap:8px; margin-bottom:16px;}
+  .modebtn{background:var(--panel); color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:8px 16px; font-size:.84rem; cursor:pointer; font-weight:600;}
+  .modebtn.active{background:var(--panel2); color:var(--text); border-color:var(--accent);}
+  .qcard{background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:20px 22px; margin-bottom:14px;}
+  .qcard .qnum{color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;}
+  .qcard .qtext{font-size:1.15rem; font-weight:600; line-height:1.4; margin-bottom:16px;}
+  .yn{display:flex; gap:10px;}
+  .yn button{flex:1; max-width:160px; padding:11px 0; border-radius:9px; border:1px solid var(--line); font-size:.95rem; font-weight:700; cursor:pointer;}
+  .yn .yes{background:#1d3a2a; color:#5fe09a; border-color:#2c5c40;}
+  .yn .yes:hover{background:#245036;}
+  .yn .no{background:#3a1d1d; color:#f0908a; border-color:#5c2c2c;}
+  .yn .no:hover{background:#502424;}
+  .trail{margin-bottom:14px;}
+  .trail .titem{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:.82rem; padding:4px 0;}
+  .trail .titem .ans{font-weight:700; font-family:ui-monospace,Menlo,Consolas,monospace;}
+  .trail .titem .ans.y{color:#5fe09a;}
+  .trail .titem .ans.n{color:#f0908a;}
+  .doneNote{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; color:var(--muted); font-size:.86rem; line-height:1.5; margin-bottom:14px;}
+
+  /* teach panel */
+  .teach{border-left:1px solid var(--line); padding:18px; overflow-y:auto;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; font-size:.85rem; line-height:1.5;}
+  .card h3{font-size:.82rem; margin-bottom:6px; color:var(--accent);}
+  .card p{color:var(--muted); margin-bottom:6px;}
+  .card p:last-child{margin-bottom:0;}
+  .legend{list-style:none;}
+  .legend li{display:flex; gap:9px; align-items:flex-start; margin-bottom:8px; font-size:.8rem; color:var(--muted);}
+  .legend .dot{width:11px; height:11px; border-radius:50%; margin-top:3px; flex:none;}
+  .legend b{color:var(--text);}
+  table.resp{width:100%; border-collapse:collapse; font-size:.78rem;}
+  table.resp td{padding:4px 6px; border-bottom:1px solid var(--line); color:var(--muted);}
+  table.resp td:first-child{font-weight:700; color:var(--text);}
+  footer{padding:14px 28px 26px; color:var(--muted); font-size:.73rem; line-height:1.5; border-top:1px solid var(--line);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚑 Dispatch Code Trainer</h1>
+  <p>Pick a chief-complaint protocol, then work the call. <b>Guided mode</b> asks key questions one at a time the way dispatch software (ProQA) does — the first YES locks the code. <b>Checklist mode</b> shows the whole cardset so you can study how the determinants stack.</p>
+</header>
+
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>Chief Complaint (Protocol)</h2>
+    <div id="protoList"></div>
+  </nav>
+
+  <main class="main">
+    <div class="codebox" id="codebox">
+      <div class="placeholder" id="placeholder">Select a protocol, then check the caller's findings →</div>
+      <div class="bigcode" id="bigcode" style="display:none"></div>
+      <div class="codemeta" id="codemeta" style="display:none">
+        <div class="spoken" id="spoken"></div>
+        <div class="desc" id="desc"></div>
+        <span class="lvlchip" id="lvlchip"></span>
+      </div>
+    </div>
+    <div class="modebar" id="modebar" style="display:none">
+      <button class="modebtn" id="modeGuided" onclick="setMode('guided')">🎧 Guided (calltaker) mode</button>
+      <button class="modebtn" id="modeChecklist" onclick="setMode('checklist')">📋 Checklist (cardset) mode</button>
+    </div>
+    <div id="detArea"></div>
+  </main>
+
+  <aside class="teach">
+    <h2>Learn</h2>
+    <div class="card" id="whyCard" style="display:none">
+      <h3>Why this code?</h3>
+      <p id="whyText"></p>
+    </div>
+    <div class="card">
+      <h3>Reading a code: 06D2</h3>
+      <p><b style="color:var(--text)">06</b> = protocol (Breathing Problems) · <b style="color:var(--text)">D</b> = priority level (Delta) · <b style="color:var(--text)">2</b> = specific determinant within that protocol.</p>
+      <p>Codes are written 06D2 or 06D02 and spoken "Six-Delta-Two."</p>
+    </div>
+    <div class="card">
+      <h3>Priority levels</h3>
+      <ul class="legend">
+        <li><span class="dot" style="background:var(--echo)"></span><span><b>Echo</b> — immediately life-threatening (arrest, agonal breathing). Closest units of any type, max response.</span></li>
+        <li><span class="dot" style="background:var(--delta)"></span><span><b>Delta</b> — unstable or high risk of deterioration. Typically ALS, lights &amp; sirens.</span></li>
+        <li><span class="dot" style="background:var(--charlie)"></span><span><b>Charlie</b> — potentially serious but currently stable. Usually ALS.</span></li>
+        <li><span class="dot" style="background:var(--bravo)"></span><span><b>Bravo</b> — moderate acuity or unknown status. BLS-appropriate in many systems.</span></li>
+        <li><span class="dot" style="background:var(--alpha)"></span><span><b>Alpha</b> — low acuity. Routine (cold) response.</span></li>
+        <li><span class="dot" style="background:var(--omega)"></span><span><b>Omega</b> — may be handled by referral or alternate response rather than an ambulance.</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The code ≠ the response</h3>
+      <p>The determinant describes <i>medical priority</i>. Each agency's response plan decides what actually rolls:</p>
+      <table class="resp">
+        <tr><td>Alpha</td><td>Agency A: BLS cold · Agency B: BLS cold</td></tr>
+        <tr><td>Bravo</td><td>A: BLS + ALS intercept · B: ALS hot</td></tr>
+        <tr><td>Charlie</td><td>A: ALS hot · B: ALS cold</td></tr>
+        <tr><td>Delta</td><td>A: ALS + fire · B: ALS + fire + supervisor</td></tr>
+        <tr><td>Echo</td><td>Multiple units, closest resources</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>How real calltakers do it</h3>
+      <p>Live calls start with <b style="color:var(--text)">Case Entry</b> (address, callback, "tell me exactly what happened," age, conscious?, breathing?) which picks the protocol — then scripted <b style="color:var(--text)">Key Questions</b> drive the determinant. Most centers run ProQA software that presents one question at a time; the dispatcher never reads the determinant list. That's what Guided mode simulates.</p>
+    </div>
+    <div class="card">
+      <h3>Selection rule</h3>
+      <p>The system selects the <b style="color:var(--text)">single highest determinant that applies</b>. In Checklist mode, check multiple findings and watch the code jump — that's how a chest-pain call upgrades from Charlie to Delta when the caller adds "he's pale and sweaty."</p>
+    </div>
+  </aside>
+</div>
+
+<footer>
+  Educational simulation for EMS/dispatch education. Determinant descriptors are drawn from publicly posted agency EMD response plans. The Medical Priority Dispatch System (MPDS®) is proprietary to Priority Dispatch Corp./IAED — this tool is not affiliated with, endorsed by, or a substitute for licensed MPDS software, cardsets, or EMD training, and must never be used for actual call triage. Local protocol versions vary.
+</footer>
+
+<script>
+const LEVELS = {
+  E:{name:"Echo",   color:"var(--echo)",   sub:"Immediately life-threatening"},
+  D:{name:"Delta",  color:"var(--delta)",  sub:"Unstable / likely to deteriorate"},
+  C:{name:"Charlie",color:"var(--charlie)",sub:"Potentially serious, currently stable"},
+  B:{name:"Bravo",  color:"var(--bravo)",  sub:"Moderate acuity / unknown status"},
+  A:{name:"Alpha",  color:"var(--alpha)",  sub:"Low acuity"},
+  O:{name:"Omega",  color:"var(--omega)",  sub:"Referral / alternate response"}
+};
+const LEVEL_ORDER = ["E","D","C","B","A","O"];
+
+// Determinants listed highest-priority first within each protocol.
+// why = teaching note explaining the clinical logic.
+const PROTOCOLS = [
+ {num:"01", name:"Abdominal Pain / Problems", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation with abdominal pain suggests shock — ruptured aneurysm, ectopic, or GI bleed."},
+  {l:"C",n:1,d:"SUSPECTED aortic aneurysm (tearing/ripping pain), age ≥ 50",why:"Tearing pain radiating to the back in an older patient is AAA/dissection until proven otherwise."},
+  {l:"C",n:2,d:"Known aortic aneurysm",why:"A known aneurysm now causing pain may be leaking or rupturing."},
+  {l:"C",n:3,d:"Fainting or near fainting, age ≥ 50",why:"Syncope with abdominal pain in an older patient points to internal hemorrhage."},
+  {l:"C",n:4,d:"Female 12–50 with fainting or near fainting",why:"Syncope plus abdominal pain in this group = ruptured ectopic pregnancy until proven otherwise."},
+  {l:"C",n:5,d:"Male with pain above navel, age ≥ 35",why:"Epigastric pain in an older male can be an atypical MI presentation."},
+  {l:"C",n:6,d:"Female with pain above navel, age ≥ 45",why:"Women present with atypical ACS more often — epigastric pain earns a higher response."},
+  {l:"A",n:1,d:"Abdominal pain (no priority symptoms)",why:"Uncomplicated abdominal pain — routine response."}
+ ]},
+ {num:"02", name:"Allergies / Envenomations", dets:[
+  {l:"E",n:1,d:"INEFFECTIVE BREATHING",why:"Anaphylaxis with ineffective breathing is peri-arrest — airway is closing."},
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation suggests anaphylactic shock."},
+  {l:"D",n:2,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"Severe respiratory distress — airway edema or bronchospasm is winning."},
+  {l:"D",n:3,d:"Swarming ATTACK (bee, wasp, hornet)",why:"Massive envenomation load — high anaphylaxis and toxicity risk."},
+  {l:"D",n:4,d:"Snakebite",why:"Envenomation can progress rapidly; time-critical for antivenom."},
+  {l:"C",n:1,d:"Difficulty breathing or swallowing",why:"Early airway involvement — the finding that separates a rash from anaphylaxis."},
+  {l:"C",n:2,d:"History of severe allergic reaction",why:"Prior anaphylaxis predicts rapid deterioration this time."},
+  {l:"B",n:1,d:"Unknown status / other codes not applicable",why:"Can't verify severity — err upward."},
+  {l:"A",n:1,d:"No difficulty breathing or swallowing (rash/hives/itching may be present)",why:"Skin-only reaction without airway involvement — low acuity."},
+  {l:"A",n:2,d:"Spider bite",why:"Rarely life-threatening in the first hour — routine response."}
+ ]},
+ {num:"03", name:"Animal Bites / Attacks", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive after an animal attack — major trauma pathway."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation suggests serious injury or blood loss."},
+  {l:"D",n:3,d:"Chest or neck injury (with difficulty breathing)",why:"Airway or thoracic involvement from the bite."},
+  {l:"D",n:4,d:"DANGEROUS body area",why:"Bites to head, neck, chest, or groin can involve airway or major vessels."},
+  {l:"D",n:5,d:"Large animal",why:"Mass and force predict crush and multisystem injury."},
+  {l:"D",n:6,d:"EXOTIC animal",why:"Unpredictable venom or injury pattern — plus scene safety concerns."},
+  {l:"D",n:7,d:"ATTACK or multiple animals",why:"Ongoing attack or pack involvement — severe injuries and scene hazard."},
+  {l:"B",n:1,d:"POSSIBLY DANGEROUS body area",why:"Injury location could be serious; patient currently stable."},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Active significant bleeding elevates the response."},
+  {l:"B",n:3,d:"Unknown status / other codes not applicable",why:"Unverified condition — err upward."},
+  {l:"A",n:1,d:"NOT DANGEROUS body area",why:"Extremity bite, patient alert — routine."},
+  {l:"A",n:2,d:"NON-RECENT injuries (≥ 6 hrs, no priority symptoms)",why:"Old bite without red flags — no time pressure."},
+  {l:"A",n:3,d:"SUPERFICIAL bites",why:"Minor puncture or abrasion — lowest acuity."}
+ ]},
+ {num:"04", name:"Assault / Sexual Assault", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive assault victim — major trauma response."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation suggests head injury."},
+  {l:"D",n:3,d:"Chest or neck injury (with difficulty breathing)",why:"Airway or thoracic trauma from the assault."},
+  {l:"D",n:4,d:"Multiple victims",why:"Scene-level severity — more units, scene safety coordination with PD."},
+  {l:"B",n:1,d:"POSSIBLY DANGEROUS body area",why:"Injury location could hide serious pathology."},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Significant active bleeding."},
+  {l:"B",n:3,d:"Unknown status / other codes not applicable",why:"Third-party caller, unverified — err upward."},
+  {l:"A",n:1,d:"NOT DANGEROUS body area",why:"Minor injury, patient alert."},
+  {l:"A",n:2,d:"NON-RECENT injuries (≥ 6 hrs, no priority symptoms)",why:"Old injuries without red flags."}
+ ]},
+ {num:"05", name:"Back Pain (Non-Traumatic / Non-Recent)", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation with back pain suggests shock — think leaking AAA."},
+  {l:"C",n:1,d:"SUSPECTED aortic aneurysm (tearing/ripping pain), age ≥ 50",why:"Tearing back pain in an older patient is the classic dissection/AAA story."},
+  {l:"C",n:2,d:"Known aortic aneurysm",why:"Known aneurysm now painful — assume it's expanding or leaking."},
+  {l:"C",n:3,d:"Fainting or near fainting, age ≥ 50",why:"Syncope with back pain suggests internal hemorrhage."},
+  {l:"A",n:1,d:"NON-TRAUMATIC back pain",why:"Musculoskeletal back pain — low acuity."},
+  {l:"A",n:2,d:"NON-RECENT injuries (≥ 6 hrs, no priority symptoms)",why:"Old injury, no red flags."}
+ ]},
+ {num:"06", name:"Breathing Problems", dets:[
+  {l:"E",n:1,d:"INEFFECTIVE BREATHING",why:"Ineffective/agonal breathing is treated as peri-arrest — maximum response, pre-arrival CPR instructions likely."},
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation in a dyspneic patient suggests hypoxia or hypercarbia severe enough to affect the brain."},
+  {l:"D",n:2,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"One- to two-word dyspnea is a classic marker of severe respiratory distress."},
+  {l:"D",n:3,d:"CHANGING COLOR (cyanosis, pale)",why:"Color change indicates hypoxemia or shock — the patient is decompensating."},
+  {l:"D",n:4,d:"Clammy",why:"Diaphoresis with dyspnea suggests catecholamine surge — significant physiologic stress."},
+  {l:"C",n:1,d:"Abnormal breathing",why:"Breathing is abnormal but without the Delta red flags — serious, but the patient is compensating."}
+ ]},
+ {num:"07", name:"Burns (Scalds) / Explosion (Blast)", dets:[
+  {l:"D",n:1,d:"Multiple victims",why:"Scene-level event — multiple units and possible MCI activation."},
+  {l:"D",n:2,d:"Unconscious or arrest",why:"Unresponsive burn/blast victim — airway and trauma pathway."},
+  {l:"D",n:3,d:"Not alert",why:"Altered mentation suggests inhalation injury, CO, or shock."},
+  {l:"D",n:4,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"Severe respiratory distress — airway burns swell fast."},
+  {l:"C",n:1,d:"Building fire with persons reported inside",why:"Fire response with rescue priority; EMS stages for victims."},
+  {l:"C",n:2,d:"Difficulty breathing",why:"Any dyspnea after burns raises inhalation-injury concern."},
+  {l:"C",n:3,d:"Burns ≥ 18% body surface area",why:"Large burns need fluid resuscitation and burn-center consideration."},
+  {l:"C",n:4,d:"SIGNIFICANT FACIAL burns",why:"Facial burns predict airway involvement even before symptoms."},
+  {l:"B",n:1,d:"Blast injuries (without priority symptoms)",why:"Blast mechanism can hide occult injury (lungs, GI, ears)."},
+  {l:"B",n:2,d:"Unknown status / other codes not applicable",why:"Unverified — err upward."},
+  {l:"A",n:1,d:"Burns < 18% body area",why:"Smaller burns without red flags — routine."},
+  {l:"A",n:2,d:"Fire alarm (unknown situation)",why:"Alarm activation with no confirmed patient."},
+  {l:"A",n:3,d:"Sunburn or MINOR burns (≤ hand size)",why:"Minor burn — lowest acuity."}
+ ]},
+ {num:"08", name:"Carbon Monoxide / Inhalation / HazMat / CBRN", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive in a toxic environment — maximum response plus hazmat awareness."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation is a hallmark of significant CO or toxic exposure."},
+  {l:"D",n:3,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"Severe respiratory distress from the inhalation."},
+  {l:"D",n:4,d:"Multiple victims",why:"Multiple patients down = ongoing environmental hazard; hazmat response."},
+  {l:"D",n:5,d:"Unknown status / other codes not applicable",why:"Unknown condition in a toxic-exposure call defaults high, not low."},
+  {l:"C",n:1,d:"Alert with difficulty breathing",why:"Symptomatic exposure, still compensating."},
+  {l:"B",n:1,d:"Alert without difficulty breathing",why:"Exposed but asymptomatic — still evaluated; CO effects can lag."},
+  {l:"O",n:1,d:"Carbon monoxide detector alarm (no symptoms)",why:"Detector activation with nobody symptomatic — often a fire-service investigation, not EMS."}
+ ]},
+ {num:"09", name:"Cardiac / Respiratory Arrest", dets:[
+  {l:"E",n:1,d:"Not breathing at all",why:"Confirmed apnea = cardiac arrest until proven otherwise. Closest units, CPR instructions started."},
+  {l:"E",n:2,d:"Breathing uncertain (AGONAL)",why:"Agonal gasps are common in early arrest and callers mistake them for breathing — treated as arrest."},
+  {l:"E",n:3,d:"Hanging",why:"Mechanism implies airway compromise and possible arrest."},
+  {l:"E",n:4,d:"Strangulation",why:"Same peri-arrest airway logic as hanging."},
+  {l:"E",n:5,d:"Suffocation",why:"Asphyxial mechanism — assume arrest or imminent arrest."},
+  {l:"E",n:6,d:"Underwater (submersion)",why:"Submersion victims get maximum response plus water-rescue resources."},
+  {l:"D",n:1,d:"INEFFECTIVE BREATHING (found during key questioning)",why:"Discovered after case entry while working another protocol — still a peri-arrest presentation."},
+  {l:"D",n:2,d:"OBVIOUS or EXPECTED DEATH — questionable",why:"Death criteria aren't clearly met, so resuscitation resources are still sent."},
+  {l:"B",n:1,d:"OBVIOUS DEATH — unquestionable",why:"Injuries incompatible with life (e.g., decapitation, rigor). No resuscitation response; PD/coroner notified."},
+  {l:"O",n:1,d:"EXPECTED DEATH — unquestionable (hospice/terminal)",why:"Anticipated death under care — handled by notification pathways, not an emergency response."}
+ ]},
+ {num:"10", name:"Chest Pain (Non-Traumatic)", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Chest pain with altered mentation suggests hypoperfusion — possible cardiogenic shock or dysrhythmia."},
+  {l:"D",n:2,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"Severe dyspnea with chest pain raises concern for MI with failure or a massive PE."},
+  {l:"D",n:3,d:"CHANGING COLOR",why:"Pallor or cyanosis with chest pain points to shock states."},
+  {l:"D",n:4,d:"Clammy (pale and sweaty)",why:"Diaphoresis is one of the strongest bedside predictors of ACS. This is the finding that turns 'chest pain, Charlie' into a Delta."},
+  {l:"C",n:1,d:"Abnormal breathing",why:"Dyspnea short of the Delta thresholds still elevates concern above baseline chest pain."},
+  {l:"C",n:2,d:"Heart attack or angina history",why:"Known coronary disease raises pre-test probability of ACS."},
+  {l:"C",n:3,d:"Cocaine use",why:"Cocaine-associated chest pain carries real risk of coronary vasospasm and MI, even in young patients."},
+  {l:"C",n:4,d:"Breathing normally, age ≥ 35",why:"Age ≥35 alone is enough risk to warrant an ALS-level evaluation."},
+  {l:"A",n:1,d:"Breathing normally, age < 35",why:"Young patient, breathing normally, no red flags — statistically low-risk, routine response."}
+ ]},
+ {num:"11", name:"Choking", dets:[
+  {l:"E",n:1,d:"COMPLETE obstruction / INEFFECTIVE BREATHING",why:"Complete airway obstruction — minutes to arrest; pre-arrival obstruction instructions given."},
+  {l:"D",n:1,d:"Abnormal breathing (PARTIAL obstruction)",why:"Still moving some air, but a partial obstruction can become complete at any moment."},
+  {l:"D",n:2,d:"Not alert",why:"Decreasing consciousness during choking — hypoxia is progressing."},
+  {l:"A",n:1,d:"Not choking now (can talk or cry, alert, breathing normally)",why:"Object cleared or passed — evaluated but low acuity."}
+ ]},
+ {num:"12", name:"Convulsions / Seizures", dets:[
+  {l:"D",n:1,d:"Not breathing (after key questioning)",why:"Apnea after a seizure — treat as arrest pathway."},
+  {l:"D",n:2,d:"CONTINUOUS or MULTIPLE seizures",why:"Status epilepticus is a time-critical emergency; benzodiazepines needed fast."},
+  {l:"D",n:3,d:"AGONAL / INEFFECTIVE BREATHING",why:"Peri-arrest breathing pattern post-ictally — maximum concern."},
+  {l:"D",n:4,d:"Effective breathing not verified, age ≥ 35",why:"An older seizure patient whose breathing can't be confirmed could be an arrest that bystanders read as a 'seizure.'"},
+  {l:"C",n:1,d:"FOCAL seizure (not alert)",why:"Focal seizure with altered consciousness needs prompt ALS evaluation."},
+  {l:"C",n:2,d:"Pregnancy",why:"Seizure in pregnancy = eclampsia until proven otherwise."},
+  {l:"C",n:3,d:"Diabetic",why:"Hypoglycemic seizures need rapid glucose correction."},
+  {l:"B",n:1,d:"Effective breathing not verified, age < 35",why:"Younger patient, breathing unverified — concerning but statistically lower arrest risk."},
+  {l:"A",n:1,d:"Not seizing now and breathing effectively (verified)",why:"Typical resolved seizure — post-ictal but stable."},
+  {l:"A",n:2,d:"FOCAL seizure (alert)",why:"Awake and alert during a focal seizure — low immediate risk."},
+  {l:"A",n:3,d:"Impending seizure (aura)",why:"Nothing has happened yet — routine response positions resources."}
+ ]},
+ {num:"13", name:"Diabetic Problems", dets:[
+  {l:"D",n:1,d:"Unconscious",why:"Unresponsive diabetic = profound hypoglycemia until glucose proves otherwise."},
+  {l:"C",n:1,d:"Not alert",why:"Altered but rousable — needs glucose evaluation promptly."},
+  {l:"C",n:2,d:"Abnormal behavior",why:"Combativeness or confusion is classic neuroglycopenia."},
+  {l:"C",n:3,d:"Abnormal breathing",why:"Kussmaul respirations suggest DKA."},
+  {l:"A",n:1,d:"Alert and behaving normally",why:"Awake, oriented, behaving normally — low acuity."}
+ ]},
+ {num:"14", name:"Drowning (Near) / Diving / SCUBA Accident", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Submersion arrest — maximum response plus water rescue."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation after submersion — hypoxic injury."},
+  {l:"D",n:3,d:"DIVING or suspected neck injury",why:"Shallow-water diving mechanism — assume c-spine injury."},
+  {l:"D",n:4,d:"SCUBA accident",why:"Decompression illness or arterial gas embolism — may need hyperbarics."},
+  {l:"C",n:1,d:"Alert with abnormal breathing",why:"Aspiration can cause delayed deterioration — 'secondary drowning' concern."},
+  {l:"B",n:1,d:"Alert and breathing normally (injuries or still in water)",why:"Stable but not yet safe or fully assessed."},
+  {l:"B",n:2,d:"Unknown status / other codes not applicable",why:"Unverified — err upward."},
+  {l:"A",n:1,d:"Alert, breathing normally, no injuries, out of water",why:"Uneventful rescue — low acuity."}
+ ]},
+ {num:"15", name:"Electrocution / Lightning", dets:[
+  {l:"E",n:1,d:"NOT BREATHING / INEFFECTIVE BREATHING",why:"Electrical arrest — often VF; excellent survival odds with fast response."},
+  {l:"D",n:1,d:"Unconscious",why:"Unresponsive after shock — dysrhythmia or neurologic injury."},
+  {l:"D",n:2,d:"Not disconnected from power",why:"Patient still energized — rescuer hazard; utility/fire response needed."},
+  {l:"D",n:3,d:"Power not off or hazard present",why:"Scene remains dangerous for responders."},
+  {l:"D",n:4,d:"EXTREME FALL (≥ 30 ft / 10 m)",why:"Electrocution plus a long fall — combined trauma mechanism, rescue resources."},
+  {l:"D",n:5,d:"LONG FALL",why:"Secondary fall trauma on top of the electrical injury."},
+  {l:"D",n:6,d:"Not alert",why:"Altered mentation after shock."},
+  {l:"D",n:7,d:"Abnormal breathing",why:"Respiratory involvement after electrical injury."},
+  {l:"D",n:8,d:"Unknown status / other codes not applicable",why:"Electrocution calls default HIGH when unverified — note there's no Bravo/Alpha 'unknown' here."},
+  {l:"C",n:1,d:"Alert and breathing normally",why:"Currently stable, but delayed dysrhythmias happen — still ALS-evaluated."}
+ ]},
+ {num:"16", name:"Eye Problems / Injuries", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation means this isn't really an eye call — something systemic is wrong."},
+  {l:"B",n:1,d:"SEVERE eye injuries",why:"Penetrating trauma or chemical exposure — sight-threatening."},
+  {l:"A",n:1,d:"MODERATE eye injuries",why:"Significant but not sight-threatening."},
+  {l:"A",n:2,d:"MINOR eye injuries",why:"Foreign body sensation, minor irritation."},
+  {l:"A",n:3,d:"MEDICAL eye problems",why:"Non-traumatic eye complaint — lowest acuity."}
+ ]},
+ {num:"17", name:"Falls", dets:[
+  {l:"D",n:1,d:"EXTREME FALL (≥ 30 ft / 10 m)",why:"Mechanism alone predicts multisystem trauma; often triggers rescue resources."},
+  {l:"D",n:2,d:"Unconscious or arrest",why:"Unresponsive after a fall — head injury or medical cause of the fall."},
+  {l:"D",n:3,d:"Not alert",why:"Altered mentation post-fall suggests TBI or an underlying medical event."},
+  {l:"D",n:4,d:"Chest or neck injury (with difficulty breathing)",why:"Suggests pneumothorax, flail segment, or airway involvement."},
+  {l:"D",n:5,d:"LONG FALL (10–29 ft)",why:"High-energy mechanism warranting trauma-level response."},
+  {l:"B",n:1,d:"POSSIBLY DANGEROUS body area",why:"Injury near chest, abdomen, head, or pelvis — could be serious, currently stable."},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Active significant bleeding elevates the response."},
+  {l:"B",n:3,d:"Unknown status / other codes not applicable",why:"Can't verify the patient's condition — err upward."},
+  {l:"A",n:1,d:"NOT DANGEROUS body area",why:"Extremity injury, patient alert — routine response."},
+  {l:"A",n:2,d:"NON-RECENT injuries (≥ 6 hrs, no priority symptoms)",why:"Old injury without red flags — no time pressure."},
+  {l:"A",n:3,d:"PUBLIC ASSIST (no injuries, no priority symptoms)",why:"Lift assist only — many agencies send a single unit cold."}
+ ]},
+ {num:"18", name:"Headache", dets:[
+  {l:"C",n:1,d:"Not alert",why:"Headache with altered mentation — think intracranial bleed."},
+  {l:"C",n:2,d:"Abnormal breathing",why:"Breathing changes with headache suggest rising intracranial pressure."},
+  {l:"C",n:3,d:"Speech problems",why:"Neuro deficit — this 'headache' may be a stroke."},
+  {l:"C",n:4,d:"Sudden onset of severe pain",why:"Thunderclap onset — subarachnoid hemorrhage until proven otherwise."},
+  {l:"C",n:5,d:"Numbness",why:"Focal sensory deficit accompanying the headache."},
+  {l:"C",n:6,d:"Paralysis",why:"Focal motor deficit — stroke pathway."},
+  {l:"C",n:7,d:"Change in behavior (≤ 3 hrs)",why:"Acute behavior change points to an intracranial process."},
+  {l:"B",n:1,d:"Unknown status / other codes not applicable",why:"Unverified — moderate response."},
+  {l:"A",n:1,d:"Breathing normally (no priority symptoms)",why:"Uncomplicated headache — low acuity."}
+ ]},
+ {num:"19", name:"Heart Problems / A.I.C.D.", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation with a cardiac complaint — hypoperfusion from a dysrhythmia."},
+  {l:"D",n:2,d:"DIFFICULTY SPEAKING BETWEEN BREATHS",why:"Severe dyspnea — possible acute heart failure."},
+  {l:"D",n:3,d:"CHANGING COLOR",why:"Pallor or cyanosis — shock state."},
+  {l:"D",n:4,d:"Clammy",why:"Diaphoresis — strong ACS/dysrhythmia indicator."},
+  {l:"D",n:5,d:"Just resuscitated and/or defibrillated (external)",why:"Post-ROSC or post-shock patients re-arrest frequently."},
+  {l:"C",n:1,d:"Firing of A.I.C.D.",why:"The implanted defibrillator fired — it treated something lethal."},
+  {l:"C",n:2,d:"Abnormal breathing",why:"Dyspnea short of Delta thresholds."},
+  {l:"C",n:3,d:"Chest pain, age ≥ 35",why:"Age-based ACS risk."},
+  {l:"C",n:4,d:"Cardiac history",why:"Known heart disease raises pre-test probability."},
+  {l:"C",n:5,d:"Cocaine",why:"Sympathomimetic cardiac stress — dysrhythmia and MI risk."},
+  {l:"C",n:6,d:"Heart rate ≤ 50 or ≥ 130 bpm (no priority symptoms)",why:"Rate extremes can decompensate even in a currently stable patient."},
+  {l:"C",n:7,d:"Unknown status / other codes not applicable",why:"Cardiac complaints default to Charlie when unverified, not Bravo."},
+  {l:"A",n:1,d:"Heart rate 50–130 bpm (no priority symptoms)",why:"Normal rate, no red flags."},
+  {l:"A",n:2,d:"Chest pain, age < 35 (no priority symptoms)",why:"Young, no red flags — statistically low risk."}
+ ]},
+ {num:"20", name:"Heat / Cold Exposure", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation defines heat stroke and severe hypothermia — true emergencies."},
+  {l:"D",n:2,d:"Multiple victims (with priority symptoms)",why:"Environmental event affecting several people — scene-level response."},
+  {l:"C",n:1,d:"Heart attack or angina history",why:"Thermal stress plus coronary disease — higher risk of a cardiac event."},
+  {l:"B",n:1,d:"Change in skin color",why:"Skin changes suggest the exposure is becoming significant."},
+  {l:"B",n:2,d:"Unknown status / other codes not applicable",why:"Unverified — moderate response."},
+  {l:"A",n:1,d:"Alert (no priority symptoms)",why:"Heat cramps or mild cold exposure — low acuity."}
+ ]},
+ {num:"21", name:"Hemorrhage / Lacerations", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive bleeding patient — hemorrhagic shock or arrest."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation implies significant blood loss."},
+  {l:"D",n:3,d:"DANGEROUS hemorrhage",why:"Bleeding from an area that can exsanguinate (neck, groin, arterial)."},
+  {l:"D",n:4,d:"Abnormal breathing",why:"Respiratory compromise with bleeding suggests shock."},
+  {l:"C",n:1,d:"Hemorrhage through TUBES (trach, catheter, etc.)",why:"Bleeding through medical devices is hard to control and implies a fragile patient."},
+  {l:"C",n:2,d:"Hemorrhage of dialysis fistula",why:"High-flow AV access can bleed catastrophically fast."},
+  {l:"B",n:1,d:"POSSIBLY DANGEROUS hemorrhage",why:"Location or volume raises concern without confirmed instability."},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Steady significant bleeding, patient still compensating."},
+  {l:"B",n:3,d:"Bleeding disorder",why:"Hemophilia or similar — minor bleeds behave badly."},
+  {l:"B",n:4,d:"Blood thinners",why:"Anticoagulated patients can't clot; low threshold to upgrade."},
+  {l:"A",n:1,d:"NOT DANGEROUS hemorrhage",why:"Controlled bleeding from a low-risk site."},
+  {l:"A",n:2,d:"MINOR hemorrhage",why:"Small laceration, oozing — lowest acuity."}
+ ]},
+ {num:"22", name:"Inaccessible Incident / Entrapment (Non-Vehicle)", dets:[
+  {l:"D",n:1,d:"Mechanical / machinery ENTRAPMENT",why:"Machinery entrapment — crush injury plus complex extrication; rescue dispatched."},
+  {l:"D",n:2,d:"Trench collapse",why:"Buried victims asphyxiate quickly; technical rescue required."},
+  {l:"D",n:3,d:"Structure collapse",why:"Crush syndrome risk plus ongoing collapse hazard."},
+  {l:"D",n:4,d:"Confined space ENTRAPMENT",why:"Atmosphere may be toxic or oxygen-deficient — technical rescue territory."},
+  {l:"D",n:5,d:"Inaccessible terrain situation",why:"Patient can't be reached by normal means — specialized access needed."},
+  {l:"D",n:6,d:"Mudslide / avalanche",why:"Burial with asphyxiation risk — time-critical rescue."},
+  {l:"B",n:1,d:"No longer trapped (unknown injuries)",why:"Freed but unassessed — injuries unknown."},
+  {l:"B",n:2,d:"PERIPHERAL ENTRAPMENT only",why:"A limb or digit caught — painful but not life-threatening."},
+  {l:"B",n:3,d:"Unknown status (investigation)",why:"Unverified report — investigate with moderate response."},
+  {l:"A",n:1,d:"No longer trapped (no injuries)",why:"Freed and uninjured — routine."}
+ ]},
+ {num:"23", name:"Overdose / Poisoning (Ingestion)", dets:[
+  {l:"D",n:1,d:"Unconscious",why:"Unresponsive OD — airway at risk; opioid arrest is the classic scenario."},
+  {l:"D",n:2,d:"CHANGING COLOR",why:"Cyanosis in OD = hypoventilation, likely opioid toxidrome."},
+  {l:"C",n:1,d:"Not alert",why:"Decreasing consciousness with a rising drug level — the patient you have now isn't the patient you'll have in 10 minutes."},
+  {l:"C",n:2,d:"Abnormal breathing",why:"Respiratory depression is the kill mechanism in most ODs."},
+  {l:"C",n:3,d:"Antidepressants (tricyclic)",why:"TCAs cause seizures and lethal dysrhythmias — deceptively stable early."},
+  {l:"C",n:4,d:"Cocaine, methamphetamine (or derivatives)",why:"Sympathomimetics risk dysrhythmia, hyperthermia, seizure."},
+  {l:"C",n:5,d:"Narcotics (heroin/opioids)",why:"Opioid ingestion can progress to respiratory arrest — naloxone-ready response."},
+  {l:"C",n:6,d:"Acid or alkali (lye)",why:"Caustic ingestion threatens the airway through burns and edema."},
+  {l:"C",n:7,d:"Unknown status / other codes not applicable",why:"Unknown substance or condition — err upward."},
+  {l:"B",n:1,d:"OVERDOSE (without priority symptoms)",why:"Intentional ingestion, currently asymptomatic — still transported and monitored."},
+  {l:"O",n:1,d:"POISONING (without priority symptoms)",why:"Accidental, asymptomatic — often referred to Poison Control."}
+ ]},
+ {num:"24", name:"Pregnancy / Childbirth / Miscarriage", dets:[
+  {l:"D",n:1,d:"BREECH or CORD presentation",why:"Abnormal presentation — obstetric emergency the crew may have to manage on scene."},
+  {l:"D",n:2,d:"Head visible / out",why:"Delivery is happening now — pre-arrival delivery instructions."},
+  {l:"D",n:3,d:"IMMINENT delivery (≥ 5 months / 20 weeks)",why:"Birth expected before or right at crew arrival."},
+  {l:"D",n:4,d:"3rd TRIMESTER hemorrhage",why:"Think placental abruption or previa — two patients at risk."},
+  {l:"D",n:5,d:"HIGH-RISK complications",why:"Known complications (eclampsia risk, multiples, etc.) elevate the response."},
+  {l:"D",n:6,d:"Baby born — complications with baby",why:"Neonatal resuscitation may be needed."},
+  {l:"D",n:7,d:"Baby born — complications with mother",why:"Postpartum hemorrhage is the classic killer."},
+  {l:"C",n:1,d:"2nd TRIMESTER hemorrhage or MISCARRIAGE",why:"Significant bleeding risk, prompt evaluation."},
+  {l:"C",n:2,d:"1st TRIMESTER SERIOUS hemorrhage",why:"Heavy early-pregnancy bleeding — hemodynamic concern."},
+  {l:"C",n:3,d:"Baby born (no complications)",why:"Mom and baby both need assessment and transport."},
+  {l:"B",n:1,d:"Labor (delivery not imminent, ≥ 5 months / 20 weeks)",why:"Time to transport before delivery."},
+  {l:"B",n:2,d:"Unknown status / other codes not applicable",why:"Unverified — moderate response."},
+  {l:"A",n:1,d:"1st TRIMESTER hemorrhage or MISCARRIAGE (minor)",why:"Early, lighter bleeding — lower acuity."},
+  {l:"O",n:1,d:"Waters broken (no contractions or presenting parts)",why:"Membranes ruptured but labor not active — lowest priority on this protocol."}
+ ]},
+ {num:"25", name:"Psychiatric / Abnormal Behavior / Suicide Attempt", dets:[
+  {l:"D",n:1,d:"Not alert",why:"Altered mentation — possible overdose or injury behind the behavioral call."},
+  {l:"D",n:2,d:"DANGEROUS hemorrhage",why:"Self-inflicted wounds with life-threatening bleeding."},
+  {l:"B",n:1,d:"SERIOUS hemorrhage",why:"Significant self-inflicted bleeding."},
+  {l:"B",n:2,d:"Non-SERIOUS or MINOR hemorrhage",why:"Superficial wounds — still transported and assessed."},
+  {l:"B",n:3,d:"THREATENING SUICIDE",why:"Verbal threat without injury yet — PD typically co-responds; staging considerations."},
+  {l:"B",n:4,d:"Jumper (threatening)",why:"Threatening to jump — scene safety and specialized response."},
+  {l:"B",n:5,d:"Near hanging, strangulation, or suffocation (alert)",why:"Survived attempt — airway edema can develop late."},
+  {l:"B",n:6,d:"Unknown status / other codes not applicable",why:"Unverified — moderate response with PD."},
+  {l:"A",n:1,d:"Non-suicidal and alert",why:"Behavioral complaint, no injury or threat."},
+  {l:"A",n:2,d:"Suicidal (not threatening) and alert",why:"Ideation without active threat — often PD-primary depending on local policy."}
+ ]},
+ {num:"26", name:"Sick Person (Specific Diagnosis)", dets:[
+  {l:"D",n:1,d:"Not alert",why:"The one hard red flag on this protocol — altered mentation makes any 'sick person' a Delta."},
+  {l:"C",n:1,d:"ALTERED LEVEL OF CONSCIOUSNESS (reported)",why:"Caller reports altered LOC that can't be confirmed as 'not alert.'"},
+  {l:"C",n:2,d:"Abnormal breathing",why:"Dyspnea in a generically 'sick' patient earns ALS evaluation."},
+  {l:"C",n:3,d:"Sickle cell crisis / thalassemia",why:"Vaso-occlusive crisis is severely painful and can hide serious complications."},
+  {l:"B",n:1,d:"Unknown status / other codes not applicable",why:"Third-party caller, no details — send and see."},
+  {l:"A",n:1,d:"No priority symptoms",why:"The classic 26A — 'sick person, low priority.' Flu-like illness, general malaise."}
+ ]},
+ {num:"27", name:"Stab / Gunshot / Penetrating Trauma", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive penetrating trauma — load-and-go pathway, trauma center."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation — hemorrhagic shock or head involvement."},
+  {l:"D",n:3,d:"CENTRAL wounds",why:"Torso, neck, or head wounds — the wounds that kill."},
+  {l:"D",n:4,d:"Multiple wounds",why:"Multiple penetrations multiply the bleeding sources."},
+  {l:"D",n:5,d:"Multiple victims",why:"Shooting/stabbing with multiple patients — MCI-style assignment, PD coordination."},
+  {l:"B",n:1,d:"NON-RECENT (≥ 6 hrs) single CENTRAL wound",why:"Old central wound, survived this long — concerning location but time-tested."},
+  {l:"B",n:2,d:"Known single PERIPHERAL wound",why:"Single extremity wound — serious but usually survivable."},
+  {l:"B",n:3,d:"SERIOUS hemorrhage",why:"Significant active bleeding."},
+  {l:"B",n:4,d:"Unknown status / other codes not applicable",why:"Third-party 'shots fired, someone's down' calls — unverified."},
+  {l:"B",n:5,d:"OBVIOUS DEATH (explosive GSW to head)",why:"Injuries incompatible with life — PD/coroner pathway."},
+  {l:"A",n:1,d:"NON-RECENT (≥ 6 hrs) PERIPHERAL wounds (no priority symptoms)",why:"Old extremity wound, no red flags."}
+ ]},
+ {num:"28", name:"Stroke (CVA)", dets:[
+  {l:"C",n:1,d:"Not alert",why:"Altered consciousness with stroke symptoms — possible large-vessel occlusion or bleed. Note: this protocol tops out at Charlie; stroke patients are 'stable but time-critical.'"},
+  {l:"C",n:2,d:"Abnormal breathing",why:"Breathing changes with neuro deficit raise concern for brainstem involvement."},
+  {l:"C",n:3,d:"Speech problems",why:"Aphasia/dysarthria — a core stroke screen finding."},
+  {l:"C",n:4,d:"Numbness, paralysis, or movement problems",why:"Unilateral weakness — the classic deficit."},
+  {l:"C",n:5,d:"Vision problems",why:"Field cuts or sudden visual loss localize to posterior circulation."},
+  {l:"C",n:6,d:"Sudden onset of severe headache",why:"Thunderclap headache — think subarachnoid hemorrhage."},
+  {l:"C",n:7,d:"STROKE history",why:"Prior stroke raises probability this is another one."},
+  {l:"C",n:8,d:"Breathing normally, age ≥ 35",why:"Age-based risk keeps the response at Charlie even without confirmed deficits."},
+  {l:"A",n:1,d:"Breathing normally, age < 35",why:"Young, breathing normally, no confirmed deficits — lower priority."}
+ ]},
+ {num:"29", name:"Traffic / Transportation Incidents", dets:[
+  {l:"D",n:1,d:"MAJOR INCIDENT (multiple vehicles/patients, bus, hazmat scale)",why:"Scene-level severity — triggers a mass-casualty style assignment."},
+  {l:"D",n:2,d:"HIGH MECHANISM (rollover, ejection, auto vs. pedestrian, motorcycle…)",why:"Mechanism predicts occult injury even when the caller says 'they look okay.'"},
+  {l:"D",n:3,d:"HAZMAT involved",why:"Adds hazmat resources and changes approach for responders."},
+  {l:"D",n:4,d:"Pinned (trapped) victim",why:"Entrapment requires extrication — fire/rescue dispatched with EMS."},
+  {l:"D",n:5,d:"Not alert",why:"Altered occupant = head injury or shock."},
+  {l:"B",n:1,d:"Injuries (confirmed)",why:"Injuries confirmed but nothing suggesting instability — the classic '29 Bravo 1.'"},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Significant bleeding upgrades from a routine injury crash."},
+  {l:"B",n:3,d:"Other hazards (fluid spill, traffic exposure)",why:"Scene hazards factor into the assignment."},
+  {l:"B",n:4,d:"Unknown status / other codes not applicable",why:"Third-party 'I just drove past a crash' calls land here."},
+  {l:"A",n:1,d:"1st-party caller, injury to NOT DANGEROUS body area",why:"Patient themselves calling with a minor injury."},
+  {l:"O",n:1,d:"No injuries (confirmed)",why:"Property damage only — refer to police."}
+ ]},
+ {num:"30", name:"Traumatic Injuries (Specific)", dets:[
+  {l:"D",n:1,d:"Unconscious or arrest",why:"Unresponsive trauma patient — highest trauma response."},
+  {l:"D",n:2,d:"Not alert",why:"Altered mentation after injury — TBI or shock."},
+  {l:"D",n:3,d:"Chest or neck injury (with difficulty breathing)",why:"Airway or thoracic involvement."},
+  {l:"B",n:1,d:"POSSIBLY DANGEROUS body area",why:"Location could hide serious injury; patient stable."},
+  {l:"B",n:2,d:"SERIOUS hemorrhage",why:"Significant active bleeding."},
+  {l:"A",n:1,d:"NOT DANGEROUS body area",why:"Minor extremity injury."},
+  {l:"A",n:2,d:"NON-RECENT (≥ 6 hrs) injuries (no priority symptoms)",why:"Old injury, no red flags."},
+  {l:"O",n:1,d:"No injuries (confirmed)",why:"Confirmed uninjured — referral or no response."}
+ ]},
+ {num:"31", name:"Unconscious / Fainting (Near)", dets:[
+  {l:"E",n:1,d:"INEFFECTIVE BREATHING",why:"Unconscious with ineffective breathing at case entry — arrest pathway, maximum response."},
+  {l:"D",n:1,d:"Unconscious — AGONAL/INEFFECTIVE BREATHING",why:"Peri-arrest presentation confirmed during questioning."},
+  {l:"D",n:2,d:"Unconscious — effective breathing",why:"Still unconscious but breathing well — airway remains at risk."},
+  {l:"D",n:3,d:"Not alert",why:"Rousable but altered after syncope — needs rapid ALS assessment."},
+  {l:"D",n:4,d:"CHANGING COLOR",why:"Color change with unconsciousness suggests hypoxia or poor perfusion."},
+  {l:"C",n:1,d:"Alert with abnormal breathing",why:"Awake now, but breathing abnormally after the event."},
+  {l:"C",n:2,d:"Fainting episode(s), alert, age ≥ 35 WITH cardiac history",why:"Syncope + age + cardiac history = possible dysrhythmia."},
+  {l:"C",n:3,d:"Female 12–50 with abdominal pain",why:"Syncope with abdominal pain in this group = ruptured ectopic until proven otherwise."},
+  {l:"A",n:1,d:"Fainting episode(s), alert, age ≥ 35, NO cardiac history",why:"Recovered syncope without cardiac risk factors."},
+  {l:"A",n:2,d:"Fainting episode(s), alert, age < 35, WITH cardiac history",why:"Young but with cardiac history — still Alpha in this version, worth discussing with students."},
+  {l:"A",n:3,d:"Fainting episode(s), alert, age < 35, NO cardiac history",why:"Classic vasovagal syncope — lowest acuity on the protocol."}
+ ]},
+ {num:"32", name:"Unknown Problem (Person Down)", dets:[
+  {l:"D",n:1,d:"LIFE STATUS QUESTIONABLE",why:"Nobody can confirm the patient is alive — respond as if they aren't."},
+  {l:"B",n:1,d:"Standing, sitting, moving, or talking",why:"Signs of life observed — moderate response."},
+  {l:"B",n:2,d:"Medical alarm (alert) notification, no patient info",why:"PERS/medical-alarm activation with zero clinical detail."},
+  {l:"B",n:3,d:"Unknown status / other codes not applicable",why:"Classic third-party 'person down' with no details."},
+  {l:"B",n:4,d:"Caller's language not understood (no interpreter)",why:"Can't interrogate the caller — send and see."}
+ ]},
+ {num:"33", name:"Transfer / Interfacility / Palliative Care", dets:[
+  {l:"D",n:1,d:"Suspected cardiac or respiratory arrest",why:"Facility reports peri-arrest — emergency response, not a routine transfer."},
+  {l:"D",n:2,d:"Just resuscitated and/or defibrillated (external)",why:"Post-ROSC transfers re-arrest — highest transfer priority."},
+  {l:"C",n:1,d:"Not alert (acute change)",why:"Acute mental-status change at the sending facility."},
+  {l:"C",n:2,d:"Abnormal breathing (acute onset)",why:"New respiratory compromise."},
+  {l:"C",n:3,d:"Significant hemorrhage or shock",why:"Hemodynamically unstable transfer."},
+  {l:"C",n:4,d:"Possible acute heart problems or MI",why:"Time-critical cardiac transfer (e.g., to a cath lab)."},
+  {l:"C",n:5,d:"Acute severe pain",why:"Severe symptoms needing prompt movement."},
+  {l:"C",n:6,d:"Emergency response requested",why:"Sending clinician explicitly asked for an emergency response."},
+  {l:"A",n:1,d:"ACUITY I (no priority symptoms)",why:"Stable transfer, highest of the routine tiers."},
+  {l:"A",n:2,d:"ACUITY II (no priority symptoms)",why:"Stable, scheduled-priority transfer."},
+  {l:"A",n:3,d:"ACUITY III (no priority symptoms)",why:"Lowest-acuity routine transfer."}
+ ]},
+ {num:"34", name:"Automatic Crash Notification (ACN)", dets:[
+  {l:"D",n:1,d:"HIGH MECHANISM",why:"Vehicle telematics report rollover, high delta-V, or similar — injury presumed."},
+  {l:"D",n:2,d:"Unconscious",why:"Occupant reported unconscious."},
+  {l:"D",n:3,d:"NOT BREATHING / INEFFECTIVE BREATHING",why:"Peri-arrest occupant — maximum response."},
+  {l:"D",n:4,d:"LIFE STATUS QUESTIONABLE",why:"No voice contact with occupants — assume the worst."},
+  {l:"B",n:1,d:"Injuries involved",why:"Confirmed injuries via the telematics operator."},
+  {l:"B",n:2,d:"Multiple victims (one unit)",why:"More than one patient, single-unit scale."},
+  {l:"B",n:3,d:"Multiple victims (additional units)",why:"Multiple patients needing added resources."},
+  {l:"B",n:4,d:"Air bag / other automatic sensor activation",why:"Sensor data only, no confirmed injuries."},
+  {l:"A",n:1,d:"NOT DANGEROUS injuries (1st party, single occupant)",why:"Occupant on the line with minor injury."},
+  {l:"O",n:1,d:"No injuries (refer to police)",why:"Property damage only — police matter."}
+ ]},
+ {num:"35", name:"HCP (Health Care Professional) Admission", dets:[
+  {l:"D",n:1,d:"HCP not on scene (immediate life threat)",why:"Life threat reported, no clinician with the patient."},
+  {l:"D",n:2,d:"HCP without AED on scene (immediate life threat)",why:"Clinician present but no defibrillator available."},
+  {l:"D",n:3,d:"HCP and AED on scene (immediate life threat)",why:"Best-supported life threat — still an emergency response."},
+  {l:"C",n:1,d:"HCP not on scene (emergency response requested)",why:"Clinician-requested emergency without confirmed life threat."},
+  {l:"C",n:2,d:"HCP without AED on scene (emergency response)",why:"Clinician present, emergency-level request."},
+  {l:"C",n:3,d:"HCP with AED on scene (emergency response)",why:"Fully supported patient, emergency-level request."},
+  {l:"A",n:1,d:"At patient within 1 hour",why:"Scheduled admission — 1-hour window."},
+  {l:"A",n:2,d:"At patient within 2 hours",why:"Routine admission, 2-hour window."},
+  {l:"A",n:3,d:"At patient within 3 hours",why:"Routine admission, 3-hour window."},
+  {l:"A",n:4,d:"At patient within 4 hours",why:"Lowest urgency admission tier."}
+ ]},
+ {num:"36", name:"Pandemic / Epidemic Flu", dets:[
+  {l:"D",n:1,d:"INEFFECTIVE BREATHING with flu symptoms",why:"Peri-arrest breathing in a flu patient — the pandemic protocol still catches the sickest."},
+  {l:"D",n:2,d:"Not alert with flu symptoms",why:"Altered mentation — severe systemic illness."},
+  {l:"D",n:3,d:"DIFFICULTY SPEAKING BETWEEN BREATHS with flu symptoms",why:"Severe respiratory distress — likely pneumonia/ARDS."},
+  {l:"D",n:4,d:"CHANGING COLOR with flu symptoms",why:"Cyanosis — hypoxemia from the respiratory illness."},
+  {l:"C",n:1,d:"Chest pain ≥ 35 with SINGLE flu symptom",why:"Could still be ACS — one flu symptom doesn't explain away chest pain."},
+  {l:"C",n:2,d:"Abnormal breathing with SINGLE flu symptom",why:"Dyspnea not clearly attributable to flu alone."},
+  {l:"A",n:1,d:"Chest pain ≥ 35 with MULTIPLE flu symptoms",why:"Multiple flu symptoms make flu the likelier driver — this protocol deliberately DOWNGRADES during declared pandemics to protect resources."},
+  {l:"A",n:2,d:"Chest pain < 35 with SINGLE flu symptom",why:"Young, likely flu-related chest discomfort."},
+  {l:"A",n:3,d:"Abnormal breathing with MULTIPLE flu symptoms",why:"Flu-consistent dyspnea without red flags."},
+  {l:"O",n:1,d:"Flu symptoms only (cough, fever, chills, aches…)",why:"Uncomplicated flu — referral/alternate care; this protocol only activates when authorities declare it."},
+  {l:"O",n:2,d:"Chest pain < 35 with MULTIPLE flu symptoms",why:"Young patient, flu-explained symptoms — referral pathway."}
+ ]}
+];
+
+// Convert negative/awkward descriptors into natural calltaker questions.
+// inv:true means answering NO selects the determinant (like ProQA's "Is s/he completely alert?").
+PROTOCOLS.forEach(p => p.dets.forEach(d => {
+  const t = d.d;
+  if (/^Not alert/i.test(t)) { d.q = "Is the patient completely alert (responding appropriately)?" + (/flu/i.test(t) ? " (flu symptoms present)" : ""); d.inv = true; }
+  else if (/^Not breathing at all/i.test(t)) { d.q = "Is the patient breathing at all?"; d.inv = true; }
+  else if (/^Not breathing \(after/i.test(t)) { d.q = "Now that the seizure has stopped — is the patient breathing?"; d.inv = true; }
+  else if (/^Not disconnected from power/i.test(t)) { d.q = "Has the patient been disconnected from the power source?"; d.inv = true; }
+  else if (/^Power not off/i.test(t)) { d.q = "Is the power off and the scene free of hazards?"; d.inv = true; }
+  else if (/^Unknown status/i.test(t)) { d.q = "Is the patient's status unknown (no other code applies)?"; }
+  else if (/^No difficulty breathing or swallowing/i.test(t)) { d.q = "Is the patient breathing and swallowing normally (rash, hives, or itching may be present)?"; }
+  else if (/^Not choking now/i.test(t)) { d.q = "Is the patient able to talk or cry — alert and breathing normally (not choking anymore)?"; }
+  else if (/^Not seizing now/i.test(t)) { d.q = "Has the seizure stopped, with effective breathing verified?"; }
+  else if (/^No longer trapped \(unknown/i.test(t)) { d.q = "Is the person freed / no longer trapped (injuries unknown)?"; }
+  else if (/^No longer trapped \(no/i.test(t)) { d.q = "Is the person freed / no longer trapped, with no injuries?"; }
+  else if (/^No injuries \(confirmed\)/i.test(t)) { d.q = "Is everyone confirmed to be uninjured?"; }
+  else if (/^No injuries \(refer/i.test(t)) { d.q = "Is everyone confirmed to be uninjured (police matter only)?"; }
+  else if (/^Non-suicidal and alert/i.test(t)) { d.q = "Is the patient alert and NOT suicidal?"; }
+  else if (/^Suicidal \(not threatening\)/i.test(t)) { d.q = "Is the patient alert and suicidal, but not actively threatening?"; }
+  else if (/^No priority symptoms/i.test(t)) { d.q = "Are priority symptoms absent (none of the red-flag conditions identified)?"; }
+}));
+
+let activeProto = null;
+let checked = new Set();
+let mode = "guided";            // "guided" (question-by-question) or "checklist" (full cardset view)
+let guidedIdx = 0;              // which determinant question we're on
+let guidedAnswers = [];         // {det, ans:true/false}
+let guidedDone = false;
+
+function setMode(m){
+  mode = m;
+  document.getElementById("modeGuided").classList.toggle("active", m==="guided");
+  document.getElementById("modeChecklist").classList.toggle("active", m==="checklist");
+  resetGuided();
+  checked = new Set();
+  if(activeProto!==null){ renderMain(); renderCode(); }
+}
+function resetGuided(){ guidedIdx = 0; guidedAnswers = []; guidedDone = false; }
+
+const protoList = document.getElementById("protoList");
+PROTOCOLS.forEach((p,i)=>{
+  const b = document.createElement("button");
+  b.className = "proto";
+  b.innerHTML = `<span class="num">${p.num}</span><span>${p.name}</span>`;
+  b.onclick = ()=>selectProto(i);
+  protoList.appendChild(b);
+});
+
+function selectProto(i){
+  activeProto = i;
+  checked = new Set();
+  resetGuided();
+  document.querySelectorAll(".proto").forEach((el,j)=>el.classList.toggle("active", j===i));
+  document.getElementById("modebar").style.display = "";
+  document.getElementById("modeGuided").classList.toggle("active", mode==="guided");
+  document.getElementById("modeChecklist").classList.toggle("active", mode==="checklist");
+  renderMain();
+  renderCode();
+}
+
+function renderMain(){
+  if(mode==="guided") renderGuided();
+  else renderDets();
+}
+
+function detKey(det){ return det.l + det.n; }
+
+function renderGuided(){
+  const p = PROTOCOLS[activeProto];
+  const area = document.getElementById("detArea");
+  area.innerHTML = "";
+
+  const restart = document.createElement("button");
+  restart.className = "clearbtn";
+  restart.textContent = "↺ Restart call";
+  restart.onclick = ()=>{ resetGuided(); checked = new Set(); renderMain(); renderCode(); };
+  area.appendChild(restart);
+
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "Questions are asked highest-priority first, the way dispatch software works. The first YES locks the determinant — you never see the full list on a live call.";
+  area.appendChild(hint);
+
+  // answered trail
+  if(guidedAnswers.length){
+    const trail = document.createElement("div");
+    trail.className = "trail";
+    guidedAnswers.forEach(a=>{
+      const t = document.createElement("div");
+      t.className = "titem";
+      t.innerHTML = `<span class="ans ${a.ans?"y":"n"}">${a.ans?"YES":"NO"}</span><span>${a.qtext}</span>`;
+      trail.appendChild(t);
+    });
+    area.appendChild(trail);
+  }
+
+  if(guidedDone){
+    const det = getControlling();
+    const note = document.createElement("div");
+    note.className = "doneNote";
+    if(det){
+      note.innerHTML = `<b style="color:var(--text)">Call coded.</b> That answer locked the determinant — every remaining question is skipped. Hit <b style="color:var(--text)">Restart call</b> to run it again with different answers, or switch to Checklist mode to see the whole cardset.`;
+    } else {
+      note.innerHTML = `<b style="color:var(--text)">No determinant matched.</b> No key question produced a positive finding. On a real call the software would assign the protocol's default/override code (the "0" codes like B0 or D0 you'll see in response plans) or the calltaker would re-interrogate. Restart and try different answers.`;
+    }
+    area.appendChild(note);
+    return;
+  }
+
+  const det = p.dets[guidedIdx];
+  const qtext = det.q || (det.d + "?");
+  const q = document.createElement("div");
+  q.className = "qcard";
+  q.innerHTML = `<div class="qnum">Protocol ${p.num} · ${p.name} — Key question ${guidedIdx+1} of ${p.dets.length}</div>
+    <div class="qtext">${qtext}</div>
+    <div class="yn">
+      <button class="yes">YES</button>
+      <button class="no">NO</button>
+    </div>`;
+  // For inverted questions (e.g. "Is the patient completely alert?"), NO selects the determinant.
+  const answer = (ans)=>{
+    guidedAnswers.push({det, ans, qtext});
+    const selects = det.inv ? !ans : ans;
+    if(selects){
+      checked.add(detKey(det));
+      guidedDone = true;         // first positive finding locks the code
+    } else {
+      guidedIdx++;
+      if(guidedIdx >= p.dets.length) guidedDone = true;
+    }
+    renderMain(); renderCode();
+  };
+  q.querySelector(".yes").onclick = ()=>answer(true);
+  q.querySelector(".no").onclick = ()=>answer(false);
+  area.appendChild(q);
+}
+
+function renderDets(){
+  const p = PROTOCOLS[activeProto];
+  const area = document.getElementById("detArea");
+  area.innerHTML = "";
+
+  const clear = document.createElement("button");
+  clear.className = "clearbtn";
+  clear.textContent = "Clear selections";
+  clear.onclick = ()=>{ checked = new Set(); renderDets(); renderCode(); };
+  area.appendChild(clear);
+
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "Check every finding present. The highest checked finding controls the code.";
+  area.appendChild(hint);
+
+  LEVEL_ORDER.forEach(lvl=>{
+    const dets = p.dets.filter(d=>d.l===lvl);
+    if(!dets.length) return;
+    const g = document.createElement("div");
+    g.className = "lvlgroup";
+    const L = LEVELS[lvl];
+    g.innerHTML = `<div class="lvlhead"><span class="dot" style="background:${L.color}"></span><span class="name" style="color:${L.color}">${L.name}</span><span class="sub">${L.sub}</span></div>`;
+    dets.forEach(det=>{
+      const key = detKey(det);
+      const lab = document.createElement("label");
+      lab.className = "det";
+      lab.style.color = L.color;
+      lab.dataset.key = key;
+      lab.innerHTML = `<input type="checkbox" ${checked.has(key)?"checked":""}>
+        <span class="lbl" style="color:var(--text)">${det.d}<span class="code">${p.num}${det.l==="O"?"Ω":det.l}${String(det.n).padStart(2,"0")}</span></span>`;
+      lab.querySelector("input").onchange = e=>{
+        e.target.checked ? checked.add(key) : checked.delete(key);
+        renderCode();
+      };
+      g.appendChild(lab);
+    });
+    area.appendChild(g);
+  });
+}
+
+function getControlling(){
+  const p = PROTOCOLS[activeProto];
+  // dets are listed highest-first; first checked one wins
+  for(const det of p.dets){ if(checked.has(detKey(det))) return det; }
+  return null;
+}
+
+function renderCode(){
+  const ph = document.getElementById("placeholder");
+  const big = document.getElementById("bigcode");
+  const meta = document.getElementById("codemeta");
+  const whyCard = document.getElementById("whyCard");
+
+  document.querySelectorAll(".det").forEach(el=>el.classList.remove("controlling"));
+
+  if(activeProto===null){ return; }
+  const p = PROTOCOLS[activeProto];
+  const det = getControlling();
+
+  if(!det){
+    ph.style.display=""; ph.textContent = `Protocol ${p.num} — ${p.name}. Check the caller's findings below.`;
+    big.style.display="none"; meta.style.display="none"; whyCard.style.display="none";
+    return;
+  }
+
+  const L = LEVELS[det.l];
+  const letter = det.l==="O" ? "Ω" : det.l;
+  const short = `${p.num}${letter}${det.n}`;
+  const full  = `${p.num}${letter}${String(det.n).padStart(2,"0")}`;
+  const spokenNum = parseInt(p.num,10);
+
+  ph.style.display="none";
+  big.style.display=""; big.textContent = short; big.style.color = L.color;
+  meta.style.display="";
+  document.getElementById("spoken").textContent = `"${spokenNum}-${L.name}-${det.n}"  ·  ${full}`;
+  document.getElementById("desc").textContent = `${p.name} — ${det.d}`;
+  const chip = document.getElementById("lvlchip");
+  chip.textContent = `${L.name} — ${L.sub}`;
+  chip.style.background = L.color;
+
+  whyCard.style.display="";
+  document.getElementById("whyText").textContent = det.why;
+
+  const el = document.querySelector(`.det[data-key="${detKey(det)}"]`);
+  if(el) el.classList.add("controlling");
+}
+</script>
+</body>
+</html>
