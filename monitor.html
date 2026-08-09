@@ -684,11 +684,10 @@ class EcgEngine{
       v+=gauss(tau,0.34,0.08,0.5);
       return v;
     }
-    if(c.vtmorph){ // V-Tach: wide, bizarre monomorphic complex with discordant T
-      const s=Math.max(0.55,Math.min(1.05,Math.sqrt(this.beatLen/0.75)));
-      v+=gauss(tau,0.05,0.048,1.5);            // broad tall R
-      v+=gauss(tau,0.13,0.055,-1.15);          // broad deep S — gives the wide, slurred look
-      v+=gauss(tau,0.13+0.11*s,0.06*s,0.75);   // broad discordant T
+    if(c.vtmorph){ // V-Tach: wide, bizarre, CONTINUOUS monomorphic wave — no flat baseline
+      const x=tau/this.beatLen;                 // normalized beat phase 0..1
+      const wg=(c0,w)=>{let s=0;for(let k=-1;k<=1;k++){const d=(x-c0-k)/w;s+=Math.exp(-0.5*d*d);}return s;};
+      v += 1.5*wg(0.22,0.11) - 0.62*wg(0.55,0.16) - 0.15;  // R hump + discordant trough, wraps beat-to-beat
       return v;
     }
     // P wave (skip for complete heart block's conducted beats — they're dissociated)
