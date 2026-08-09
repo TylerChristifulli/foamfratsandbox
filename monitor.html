@@ -575,7 +575,7 @@ const RHYTHMS={
   sinus:        {label:"Sinus",        hr:80,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_brady:  {label:"Sinus Brady",  hr:45,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_tach:   {label:"Sinus Tach",   hr:130, p:.12, pr:.14, qrs:.08, r:1.1, st:0,    t:.25, irregular:0},
-  svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.05, t:.16, irregular:0},
+  svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.04, t:.24, irregular:0},
   afib:         {label:"A-Fib",        hr:110, p:0,   pr:.12, qrs:.09, r:1.1, st:0,    t:.28, irregular:.35},
   vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.04, wide:1},
   vfib:         {label:"V-Fib",        hr:0,   special:"vf"},
@@ -686,10 +686,12 @@ class EcgEngine{
     v+=gauss(tau,qc,0.012*wide,-0.12);
     v+=gauss(tau,rc,0.014*wide,c.r);
     v+=gauss(tau,sc,0.016*wide,-0.28);
-    // ST segment + T wave
-    const stStart=sc+0.02, tC=pr+0.30;
+    // ST segment + T wave — QT shortens with rate (Bazett-like) so the T stays
+    // fully inside the beat at fast rates instead of getting clipped
+    const tScale=Math.max(0.5,Math.min(1.1,Math.sqrt(this.beatLen/0.75)));
+    const stStart=sc+0.02, tC=pr+0.30*tScale;
     if(tau>stStart && tau<tC) v+=c.st;            // ST offset
-    v+=gauss(tau,tC,0.06,c.t);
+    v+=gauss(tau,tC,0.06*tScale,c.t);
     return v;
   }
 }
