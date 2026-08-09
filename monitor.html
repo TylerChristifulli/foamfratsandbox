@@ -315,7 +315,10 @@
     <button class="dbtn pacebtn" id="mPacer">PACER</button>
     <button class="dbtn" id="mAnalyze">ANALYZE</button>
     <div class="dgrp"><span class="dnum">1</span>
-      <button class="dbtn energy" id="mEnergy">ENERGY SELECT&nbsp;<b id="enVal">200</b><span class="es">J</span></button></div>
+      <span class="dlab">ENERGY</span>
+      <button class="dstep" id="enDown">−</button>
+      <span class="dval" id="enVal">200</span><span class="dunit">J</span>
+      <button class="dstep" id="enUp">+</button></div>
     <div class="dgrp"><span class="dnum">2</span>
       <button class="dbtn charge" id="mCharge">CHARGE</button></div>
     <div class="dgrp"><span class="dnum">3</span>
@@ -572,6 +575,7 @@ const RHYTHMS={
   sinus:        {label:"Sinus",        hr:80,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_brady:  {label:"Sinus Brady",  hr:45,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_tach:   {label:"Sinus Tach",   hr:130, p:.12, pr:.14, qrs:.08, r:1.1, st:0,    t:.25, irregular:0},
+  svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.05, t:.16, irregular:0},
   afib:         {label:"A-Fib",        hr:110, p:0,   pr:.12, qrs:.09, r:1.1, st:0,    t:.28, irregular:.35},
   vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.04, wide:1},
   vfib:         {label:"V-Fib",        hr:0,   special:"vf"},
@@ -996,7 +1000,7 @@ function runMonitor(){
   }
   function monShock(){     // deliver energy: artifact + rhythm conversion (synced via shockSeq)
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy;
-    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&STATE.rhythm==="afib");
+    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       STATE.rhythm="sinus"; STATE.hr=90; STATE.pea=false;
       if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;}
@@ -1009,8 +1013,9 @@ function runMonitor(){
     if(!armed){ flashMsg("Charge first — press CHARGE",1400,"#ffd23a"); return; }
     disarm(); monShock();
   }
-  function cycleEnergy(){
-    let i=ENERGIES.indexOf(STATE.shockEnergy); i=(i<0?5:(i+1)%ENERGIES.length);
+  function stepEnergy(d){
+    let i=ENERGIES.indexOf(STATE.shockEnergy); if(i<0)i=5;
+    i=Math.max(0,Math.min(ENERGIES.length-1,i+d));
     STATE.shockEnergy=ENERGIES[i];
     if(armed||charging){ disarm(); flashMsg("Energy changed — recharge needed",1400,"#ffd23a"); }
     devApply();
@@ -1022,7 +1027,8 @@ function runMonitor(){
       flashMsg(shock?"⚡ SHOCK ADVISED":"NO SHOCK ADVISED",2200, shock?"#ff8a3a":"#7dd87d"); },2400);
   }
 
-  document.getElementById("mEnergy").onclick=cycleEnergy;
+  document.getElementById("enDown").onclick=()=>stepEnergy(-1);
+  document.getElementById("enUp").onclick=()=>stepEnergy(1);
   document.getElementById("mCharge").onclick=startCharge;
   document.getElementById("mShock").onclick=deliverShock;
   document.getElementById("mAnalyze").onclick=analyze;
@@ -1414,7 +1420,7 @@ function runControl(){
   document.getElementById("btnShock").onclick=()=>{
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy;
     let lab=(STATE.sync?"Cardiovert ":"Shock ")+STATE.shockEnergy+"J";
-    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&STATE.rhythm==="afib");
+    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       Object.assign(STATE,{rhythm:"sinus",hr:90,pea:false});
       if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;}
