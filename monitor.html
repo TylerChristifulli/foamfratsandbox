@@ -577,7 +577,7 @@ const RHYTHMS={
   sinus_tach:   {label:"Sinus Tach",   hr:130, p:.12, pr:.14, qrs:.08, r:1.1, st:0,    t:.25, irregular:0},
   svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.04, t:.24, irregular:0},
   afib:         {label:"A-Fib",        hr:110, p:0,   pr:.12, qrs:.09, r:1.1, st:0,    t:.28, irregular:.35},
-  vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.04, wide:1},
+  vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.03, vtmorph:1},
   vfib:         {label:"V-Fib",        hr:0,   special:"vf"},
   asystole:     {label:"Asystole",     hr:0,   special:"asys"},
   pea:          {label:"PEA",          hr:50,  p:.12, pr:.18, qrs:.11, r:.9,  st:0,    t:.2, irregular:0, pulseless:1},
@@ -617,12 +617,19 @@ class EcgEngine{
     let rr=60/Math.max(hr,1);
     if(c.irregular) rr*= (1+ (Math.random()*2-1)*c.irregular);
     // beat type decision
-    let type="normal", dropped=false;
+    let type="normal", dropped=false, pr=c.pr;
     if(c.pvc && Math.random()<c.pvc) type="pvc";
     else if(c.pac && Math.random()<c.pac){type="pac"; rr*=0.6;}
-    if(c.wenckebach){ this.wenck++; if(this.wenck>=4){dropped=true;this.wenck=0;} }
-    if(c.mobitz2){ this.mobCount++; if(this.mobCount%3===0) dropped=true; }
-    this.beat={type,dropped,pr:c.pr,c};
+    if(c.wenckebach){
+      // Mobitz I: PR lengthens progressively across the group, R-R shortens,
+      // then a P wave fails to conduct (dropped QRS) and the cycle resets
+      pr = c.pr + this.wenck*0.05;
+      rr *= (1 - this.wenck*0.04);
+      this.wenck++;
+      if(this.wenck>=4){ dropped=true; this.wenck=0; }
+    }
+    if(c.mobitz2){ this.mobCount++; if(this.mobCount%3===0) dropped=true; }  // constant PR, sudden drop
+    this.beat={type,dropped,pr,c};
     this.beatLen=rr; this.beatT=0;
   }
   step(dt){
@@ -675,6 +682,13 @@ class EcgEngine{
       v+=gauss(tau,0.10,0.055,-1.5);
       v+=gauss(tau,0.17,0.05,0.6);
       v+=gauss(tau,0.34,0.08,0.5);
+      return v;
+    }
+    if(c.vtmorph){ // V-Tach: wide, bizarre monomorphic complex with discordant T
+      const s=Math.max(0.55,Math.min(1.05,Math.sqrt(this.beatLen/0.75)));
+      v+=gauss(tau,0.05,0.048,1.5);            // broad tall R
+      v+=gauss(tau,0.13,0.055,-1.15);          // broad deep S — gives the wide, slurred look
+      v+=gauss(tau,0.13+0.11*s,0.06*s,0.75);   // broad discordant T
       return v;
     }
     // P wave (skip for complete heart block's conducted beats — they're dissociated)
