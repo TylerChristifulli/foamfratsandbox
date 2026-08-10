@@ -492,6 +492,7 @@
       <div style="font-size:11px;color:var(--dim);margin:-4px 0 12px">When on: pulseless rhythms deteriorate (SpO₂, EtCO₂, BP fall); a successful shock or pacing capture drives recovery.</div>
       <div class="scn">
         <button class="play" id="btnScenStart">▶ Start scenario</button>
+        <button id="btnScenStop">■ Stop</button>
         <button id="btnDebrief">📋 Debrief</button>
       </div>
       <div class="log" id="dbgStatus">No scenario running.</div>
@@ -1661,10 +1662,10 @@ function runControl(){
   const rl=k=>(RHYTHMS[k]&&RHYTHMS[k].label)||k;
   const dead=r=>["vfib","asystole"].includes(r), arrest=r=>["vfib","asystole","pea"].includes(r);
   const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
-  let dbgLog=[], dbgT0=null, dbgTimer=null;
+  let dbgLog=[], dbgT0=null, dbgEnd=null, dbgRunning=false, dbgTimer=null;
   let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};   // monotonic counters
   let seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};       // authoritative levels
-  const dEvent=(label,cls)=>{ if(dbgT0==null)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
+  const dEvent=(label,cls)=>{ if(!dbgRunning)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
 
   // LOCAL logger — runs on authoritative control actions (via push); no echo flip-flop
   function logLocal(){
@@ -1698,19 +1699,27 @@ function runControl(){
 
   function dbgStatusRender(){
     const el=document.getElementById("dbgStatus");
-    el.innerHTML = dbgT0==null ? "No scenario running."
-      : "● Recording · "+fmt((performance.now()-dbgT0)/1000)+" · "+dbgLog.length+" events";
+    if(dbgT0==null){ el.innerHTML="No scenario running."; return; }
+    const dur=((dbgRunning?performance.now():dbgEnd)-dbgT0)/1000;
+    el.innerHTML = (dbgRunning?"● Recording · ":"■ Stopped · ")+fmt(dur)+" · "+dbgLog.length+" events";
   }
   document.getElementById("btnScenStart").onclick=()=>{
-    dbgLog=[]; dbgT0=performance.now();
+    dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true;
     seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
     seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
     dEvent("Scenario start — "+rl(STATE.rhythm));
     if(!dbgTimer) dbgTimer=setInterval(dbgStatusRender,1000);
   };
+  document.getElementById("btnScenStop").onclick=()=>{
+    if(!dbgRunning) return;
+    dEvent("Scenario stopped");           // logged while still running, then freeze
+    dbgRunning=false; dbgEnd=performance.now();
+    if(dbgTimer){ clearInterval(dbgTimer); dbgTimer=null; }
+    dbgStatusRender();
+  };
   const metric=(k,v,warn)=>`<div class="dbmetric${warn?" warn":""}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
   function renderDebrief(){
-    const dur=dbgT0==null?0:(performance.now()-dbgT0)/1000;
+    const dur=dbgT0==null?0:((dbgRunning?performance.now():dbgEnd)-dbgT0)/1000;
     const shocks=dbgLog.filter(e=>/^Defib|^Cardiovert/.test(e.label));
     const bad=shocks.filter(e=>e.cls==="warn").length;
     const first=shocks[0], rosc=dbgLog.find(e=>/^ROSC/.test(e.label));
