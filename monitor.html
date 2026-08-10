@@ -471,7 +471,7 @@
       <div class="toggle" style="margin-bottom:12px"><div class="switch" id="swPacer"></div><span>Transcutaneous pacer</span></div>
       <div class="field"><label>Pacer rate <b id="lPrate">70</b> ppm</label><input type="range" id="sPrate" min="30" max="120" value="70"></div>
       <div class="field"><label>Output <b id="lPma">0</b> mA</label><input type="range" id="sPma" min="0" max="140" value="0"></div>
-      <div class="field"><label>Capture at ≥ <b id="lCap">60</b> mA</label><input type="range" id="sCap" min="20" max="140" value="60"></div>
+      <div class="field"><label>Capture threshold — clinician must reach <b id="lCap">60</b> mA</label><input type="range" id="sCap" min="20" max="140" value="60"></div>
       <div style="font-size:11px;color:var(--dim)">Raise output until it reaches the capture threshold to get electrical + mechanical capture.</div>
     </div>
 
@@ -496,6 +496,15 @@
         <button id="btnDebrief">📋 Debrief</button>
       </div>
       <div class="log" id="dbgStatus">No scenario running.</div>
+    </div>
+
+    <div class="box">
+      <h3>Suggest an Edit</h3>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Have an idea or found a bug? Send it to the FOAMfrat team.</div>
+      <textarea id="sugText" rows="3" placeholder="Your suggestion or bug report…"
+        style="width:100%;box-sizing:border-box;background:#101010;border:1px solid #2a2a2a;color:#eee;border-radius:8px;padding:8px;font:inherit;resize:vertical;"></textarea>
+      <button class="startbtn" id="sugSend" style="margin-top:8px">✉ Send suggestion</button>
+      <div class="log" id="sugStatus" style="margin-top:8px;display:none"></div>
     </div>
   </div>
 </div>
@@ -1675,9 +1684,9 @@ function runControl(){
       else dEvent("Rhythm → "+rl(STATE.rhythm));
       seenL.rhythm=STATE.rhythm;
     }
-    if(STATE.pacerOn!==seenL.pacerOn){ seenL.pacerOn=STATE.pacerOn; dEvent("Pacer "+(STATE.pacerOn?"ON @ "+STATE.pacerRate+" ppm":"OFF")); }
+    if(STATE.pacerOn!==seenL.pacerOn){ seenL.pacerOn=STATE.pacerOn; dEvent("Pacer "+(STATE.pacerOn?"ON @ "+STATE.pacerRate+" ppm, output "+STATE.pacerMa+" mA (capture threshold "+STATE.captureMa+" mA)":"OFF")); }
     const cap=capturedNow();
-    if(cap!==seenL.cap){ seenL.cap=cap; if(cap){ dEvent("Pacing capture achieved ("+STATE.pacerMa+" mA)","ok"); if(STATE.sys<90) recoverUntil=performance.now()+25000; } }
+    if(cap!==seenL.cap){ seenL.cap=cap; if(cap){ dEvent("Pacing capture achieved — output "+STATE.pacerMa+" mA ≥ threshold "+STATE.captureMa+" mA","ok"); if(STATE.sys<90) recoverUntil=performance.now()+25000; } }
   }
   // REMOTE watcher — only monotonic counters (never revert), so it safely catches monitor-side actions
   function watchForLog(){
@@ -1690,7 +1699,7 @@ function runControl(){
         dEvent("ROSC — organized rhythm ("+rl(STATE.rhythm)+")","ok"); recoverUntil=performance.now()+30000; seenL.rhythm=STATE.rhythm;
       }
     }
-    if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP measured"); }
+    if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP "+STATE.sys+"/"+STATE.dia+" (MAP "+Math.round((STATE.sys+2*STATE.dia)/3)+")"); }
     if((STATE.ecg12Seq||0)>seen.tw){ seen.tw=STATE.ecg12Seq; dEvent("12-lead acquired ["+(STATE.stemiSite||"—")+"]"); }
     syncSliders();
   }
@@ -1703,12 +1712,24 @@ function runControl(){
     const dur=((dbgRunning?performance.now():dbgEnd)-dbgT0)/1000;
     el.innerHTML = (dbgRunning?"● Recording · ":"■ Stopped · ")+fmt(dur)+" · "+dbgLog.length+" events";
   }
+  // periodic full-vitals snapshot so the record captures BP + every vital over time
+  let lastSnap=0;
+  function vitalsSnapshot(){
+    let s="Vitals — HR "+(STATE.rhythm==="asystole"?0:STATE.hr)+" · SpO₂ "+(STATE.pea?"--":STATE.spo2)
+        +" · BP "+STATE.sys+"/"+STATE.dia+" · EtCO₂ "+STATE.etco2+" · RR "+STATE.rr+" · Temp "+STATE.temp.toFixed(1);
+    if(STATE.pacerOn) s+=" · Pacer "+STATE.pacerRate+"ppm/"+STATE.pacerMa+"mA"+(capturedNow()?" (capture)":" (no capture)");
+    dEvent(s);
+  }
+  function dbgTick(){
+    dbgStatusRender();
+    if(dbgRunning && performance.now()-lastSnap>=30000){ lastSnap=performance.now(); vitalsSnapshot(); }
+  }
   document.getElementById("btnScenStart").onclick=()=>{
-    dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true;
+    dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true; lastSnap=performance.now();
     seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
     seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
-    dEvent("Scenario start — "+rl(STATE.rhythm));
-    if(!dbgTimer) dbgTimer=setInterval(dbgStatusRender,1000);
+    dEvent("Scenario start — "+rl(STATE.rhythm)); vitalsSnapshot();
+    if(!dbgTimer) dbgTimer=setInterval(dbgTick,1000);
   };
   document.getElementById("btnScenStop").onclick=()=>{
     if(!dbgRunning) return;
@@ -1739,6 +1760,17 @@ function runControl(){
       : '<div style="color:#888">No events logged.</div>';
     document.getElementById("debrief").classList.add("show");
   }
+  // suggest-an-edit → opens a pre-filled email to the FOAMfrat team (sender hits send)
+  document.getElementById("sugSend").onclick=()=>{
+    const t=document.getElementById("sugText").value.trim();
+    const st=document.getElementById("sugStatus");
+    if(!t){ st.style.display="block"; st.textContent="Type a suggestion first."; return; }
+    const subj=encodeURIComponent("FOAMfrat Sim Monitor — edit suggestion");
+    const body=encodeURIComponent(t+"\n\n— sent from Sim Monitor (room "+ROOM+")");
+    window.location.href="mailto:tyler@foamfrat.com?subject="+subj+"&body="+body;
+    st.style.display="block"; st.textContent="Opening your email app to send to tyler@foamfrat.com…";
+  };
+
   document.getElementById("btnDebrief").onclick=renderDebrief;
   document.getElementById("dbClose").onclick=()=>document.getElementById("debrief").classList.remove("show");
   document.getElementById("dbCopy").onclick=()=>{
