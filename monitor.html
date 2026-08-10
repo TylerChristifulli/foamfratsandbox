@@ -693,7 +693,7 @@ class EcgEngine{
     // P wave (skip for complete heart block's conducted beats — they're dissociated)
     if(c.p && !c.chb) v+=gauss(tau,0.05,0.022,c.p);
     if(c.paced) v+= (tau>0.01&&tau<0.02)? 1.6 : 0; // pacing spike
-    const pr=b.pr||0.16;
+    const pr=(b.pr==null?0.16:b.pr);   // honor pr:0 (SVT/junctional) instead of falling back to 0.16
     const qc=pr, rc=pr+0.025, sc=pr+0.055;
     const wide=c.wide?1.9:1;
     v+=gauss(tau,qc,0.012*wide,-0.12);
