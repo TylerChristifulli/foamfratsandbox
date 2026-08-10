@@ -702,9 +702,9 @@ class EcgEngine{
     // ST segment + T wave — QT shortens with rate (Bazett-like) so the T stays
     // fully inside the beat at fast rates instead of getting clipped
     const tScale=Math.max(0.5,Math.min(1.1,Math.sqrt(this.beatLen/0.75)));
-    const stStart=sc+0.02, tC=pr+0.30*tScale;
+    const stStart=sc+0.02, tC=pr+0.27*tScale;
     if(tau>stStart && tau<tC) v+=c.st;            // ST offset
-    v+=gauss(tau,tC,Math.max(0.055,0.06*tScale),c.t);  // keep the T rounded (not spiky) at fast rates
+    v+=gauss(tau,tC,Math.max(0.07,0.075*tScale),c.t);  // broad, rounded T (never spiky), even at fast rates
     return v;
   }
 }
