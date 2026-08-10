@@ -234,6 +234,7 @@
 
   /* ---------- per-vital trend clock + popup ---------- */
   .field{position:relative;}
+  .field label{padding-right:22px;}   /* leave room for the ⏱ clock */
   .tclock{position:absolute;top:-2px;right:0;background:none;border:none;color:var(--dim);
     cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;}
   .tclock:hover{color:#bfe2ff;}
@@ -986,11 +987,9 @@ function runMonitor(){
     alarm("nHr", active.ecg && ((!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole"));
     alarm("nSpo2", active.pleth && !STATE.pea && STATE.spo2<90);
     alarm("nEtco2", active.co2 && (STATE.etco2<25||STATE.etco2>55));
-    const crit=active.ecg && (STATE.rhythm==="vfib"||STATE.rhythm==="asystole"||STATE.rhythm==="vt"||STATE.pea);
-    const banner=document.getElementById("banner");
-    if(crit){banner.style.display="block";
-      banner.textContent= STATE.pea?"** PEA — CHECK PULSE **":("** "+(RHYTHMS[STATE.rhythm].label).toUpperCase()+" **");}
-    else banner.style.display="none";
+    // No rhythm-naming banner: learners must recognize the rhythm and check a pulse
+    // themselves (the numeric alarms still flag abnormal vitals without labeling the rhythm).
+    document.getElementById("banner").style.display="none";
     renderDev();
   }
   function setNum(id,v){document.querySelector("#"+id+" .val").textContent=v;}
