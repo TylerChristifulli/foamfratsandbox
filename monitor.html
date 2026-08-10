@@ -232,6 +232,22 @@
   .dbrow.ok .lb{color:#8fe08f;} .dbrow.warn .lb{color:#ffb454;}
   .dbmetric.warn{border-color:#7a4a12;} .dbmetric.warn .v{color:#ffb454;}
 
+  /* ---------- per-vital trend clock + popup ---------- */
+  .field{position:relative;}
+  .tclock{position:absolute;top:-2px;right:0;background:none;border:none;color:var(--dim);
+    cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;}
+  .tclock:hover{color:#bfe2ff;}
+  .tclock.active{color:#ffb454;}
+  .trendpop{display:none;position:fixed;z-index:70;background:#161616;border:1px solid #333;
+    border-radius:10px;padding:12px 13px;width:216px;box-shadow:0 10px 34px rgba(0,0,0,.65);}
+  .trendpop.show{display:block;}
+  .trendpop .tpTitle{font-weight:700;margin-bottom:9px;color:#fff;font-size:13px;}
+  .trendpop .tpRow{display:flex;align-items:center;gap:6px;margin-bottom:9px;font-size:12px;color:#aaa;}
+  .trendpop .tpRow .numin{width:70px;}
+  .trendpop .tpBtns{display:flex;gap:6px;margin-top:2px;}
+  .trendpop .tpBtns button{font-size:12px;padding:7px 10px;border-radius:7px;}
+  #tpStop{background:#4a1512;border:1px solid #5c2b26;color:#ffb3ab;}
+
   /* ---------- Camera role ---------- */
   #camera{display:none;height:100%;position:relative;background:#000;}
   #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
@@ -421,24 +437,10 @@
     </div>
 
     <div class="box">
-      <h3>Trend Over Time</h3>
-      <div class="trendrow">
-        <select id="rampParam" class="sel">
-          <option value="spo2">SpO₂</option>
-          <option value="hr">Heart Rate</option>
-          <option value="rr">Resp Rate</option>
-          <option value="etco2">EtCO₂</option>
-          <option value="sys">Systolic</option>
-          <option value="dia">Diastolic</option>
-          <option value="temp">Temp</option>
-          <option value="perfusion">Perfusion</option>
-        </select>
-        <label>to <input id="rampTarget" type="number" class="numin" value="80"></label>
-        <label>over <input id="rampSecs" type="number" class="numin" value="10"> s</label>
-        <button class="startbtn" id="rampStart">▶ Start trend</button>
-        <button id="rampStop">■ Stop all</button>
-      </div>
+      <h3>Active Trends</h3>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Tap the ⏱ next to any vital to trend it to a target over time. Several can run at once.</div>
       <div class="log" id="rampLog">No active trends.</div>
+      <button id="rampStop" style="margin-top:8px">■ Stop all</button>
     </div>
 
     <div class="box">
@@ -505,6 +507,14 @@
     <div class="dbtimeline" id="dbTimeline"></div>
     <button class="cyclebtn" id="dbCopy" style="margin-top:14px">⧉ Copy log</button>
   </div>
+</div>
+
+<!-- ============ TREND POPUP (per-vital) ============ -->
+<div id="trendPop" class="trendpop">
+  <div class="tpTitle" id="tpTitle">Trend</div>
+  <div class="tpRow">to <input id="tpTarget" type="number" class="numin"> <span id="tpUnit"></span></div>
+  <div class="tpRow">over <input id="tpSecs" type="number" class="numin" value="30"> sec</div>
+  <div class="tpBtns"><button class="startbtn" id="tpStart">▶ Start</button><button id="tpStop">■ Stop</button><button id="tpCancel">Cancel</button></div>
 </div>
 
 <!-- ============ 12-LEAD SNAPSHOT OVERLAY ============ -->
@@ -1507,15 +1517,19 @@ function runControl(){
     if(min>0) nibpTimer=setInterval(()=>{STATE.nibpSeq=(STATE.nibpSeq||0)+1; push("NIBP auto-cycle");}, min*60000);
   };
 
-  /* ---- trend over time (ramp a vital to a target across N seconds) ---- */
-  const TLABEL={hr:"HR",spo2:"SpO₂",rr:"RR",etco2:"EtCO₂",sys:"Systolic",dia:"Diastolic",temp:"Temp",perfusion:"Perfusion"};
+  /* ---- trend over time — a ⏱ on each vital opens a "to X over N s" popup ---- */
+  const TLABEL={hr:"Heart Rate",spo2:"SpO₂",rr:"Resp Rate",etco2:"EtCO₂",sys:"Systolic",dia:"Diastolic",temp:"Temp",perfusion:"Perfusion"};
+  const TUNIT ={hr:"bpm",spo2:"%",rr:"/min",etco2:"mmHg",sys:"mmHg",dia:"mmHg",temp:"°F",perfusion:"%"};
+  const TSLIDER={hr:"sHr",spo2:"sSpo2",rr:"sRr",etco2:"sEtco2",sys:"sSys",dia:"sDia",temp:"sTemp",perfusion:"sPerf"};
   const ramps={}; let rampTimer=null;
   const rampLog=document.getElementById("rampLog");
+  function updateClockStates(){ document.querySelectorAll(".tclock").forEach(b=>b.classList.toggle("active",!!ramps[b.dataset.k])); }
   function rampRender(){ const ks=Object.keys(ramps);
     rampLog.innerHTML = ks.length
       ? ks.map(k=>{ const left=Math.max(0,Math.ceil((ramps[k].dur-(performance.now()-ramps[k].t0))/1000));
           return `${TLABEL[k]} → ${ramps[k].target} · ${left}s left`; }).join("<br>")
-      : "No active trends."; }
+      : "No active trends.";
+    updateClockStates(); }
   function tickRamps(){
     const now=performance.now(); let active=false;
     Object.keys(ramps).forEach(k=>{ const r=ramps[k]; let p=r.dur<=0?1:(now-r.t0)/r.dur; if(p>1)p=1;
@@ -1525,16 +1539,47 @@ function runControl(){
     if(!active && !Object.keys(ramps).length){ clearInterval(rampTimer); rampTimer=null; }
   }
   function clearTrends(){ for(const k in ramps) delete ramps[k]; if(rampTimer){clearInterval(rampTimer);rampTimer=null;} rampRender(); }
-  document.getElementById("rampStart").onclick=()=>{
-    const k=document.getElementById("rampParam").value;
-    const target=parseFloat(document.getElementById("rampTarget").value);
-    const secs=Math.max(0.5, parseFloat(document.getElementById("rampSecs").value)||0);
-    if(isNaN(target)) return;
-    ramps[k]={start:Number(STATE[k])||0, target, t0:performance.now(), dur:secs*1000};
+  function startRamp(k,target,secs){
+    ramps[k]={start:Number(STATE[k])||0, target, t0:performance.now(), dur:Math.max(0.5,secs)*1000};
     if(!rampTimer) rampTimer=setInterval(tickRamps,200);
     rampRender(); push("trend "+TLABEL[k]+"→"+target+" /"+secs+"s");
-  };
+  }
   document.getElementById("rampStop").onclick=clearTrends;
+
+  // add a ⏱ clock to each vital field + wire the shared popup
+  const pop=document.getElementById("trendPop"); let popK=null;
+  Object.keys(TSLIDER).forEach(k=>{
+    const sl=document.getElementById(TSLIDER[k]); if(!sl) return;
+    const field=sl.closest(".field"); if(!field) return;
+    const btn=document.createElement("button"); btn.className="tclock"; btn.dataset.k=k;
+    btn.title="Trend "+TLABEL[k]+" over time"; btn.textContent="⏱";
+    btn.onclick=ev=>{ ev.stopPropagation(); openTrendPop(k,btn); };
+    field.appendChild(btn);
+  });
+  function openTrendPop(k,anchor){
+    popK=k;
+    document.getElementById("tpTitle").textContent="Trend "+TLABEL[k];
+    document.getElementById("tpUnit").textContent=TUNIT[k]||"";
+    document.getElementById("tpTarget").value = ramps[k]? ramps[k].target : STATE[k];
+    document.getElementById("tpSecs").value   = ramps[k]? Math.ceil(ramps[k].dur/1000) : 30;
+    document.getElementById("tpStop").style.display = ramps[k]? "" : "none";
+    const r=anchor.getBoundingClientRect();
+    pop.style.left=Math.max(8,Math.min(window.innerWidth-224,r.right-216))+"px";
+    pop.style.top =Math.min(window.innerHeight-150,r.bottom+6)+"px";
+    pop.classList.add("show");
+    const ti=document.getElementById("tpTarget"); ti.focus(); ti.select();
+  }
+  function closeTrendPop(){ pop.classList.remove("show"); popK=null; }
+  document.getElementById("tpStart").onclick=()=>{
+    const target=parseFloat(document.getElementById("tpTarget").value);
+    const secs=Math.max(0.5,parseFloat(document.getElementById("tpSecs").value)||0);
+    if(!isNaN(target)&&popK) startRamp(popK,target,secs);
+    closeTrendPop();
+  };
+  document.getElementById("tpStop").onclick=()=>{ if(popK&&ramps[popK]){ delete ramps[popK]; rampRender(); } closeTrendPop(); };
+  document.getElementById("tpCancel").onclick=closeTrendPop;
+  document.addEventListener("click",e=>{ if(pop.classList.contains("show") && !pop.contains(e.target) && !e.target.classList.contains("tclock")) closeTrendPop(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeTrendPop(); });
 
   /* ---- 12-lead ECG ---- */
   const siteSel=document.getElementById("stemiSite");
