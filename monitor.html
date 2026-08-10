@@ -214,6 +214,24 @@
     padding:8px 14px;font-size:13px;font-weight:700;}
   .twelve canvas{flex:1;width:100%;min-height:0;display:block;background:#fff;}
 
+  /* ---------- Debrief overlay ---------- */
+  .debrief{display:none;position:fixed;inset:0;background:#0c0c0c;color:#eee;z-index:60;flex-direction:column;}
+  .debrief.show{display:flex;}
+  .dbhead{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#111;border-bottom:1px solid #242424;font-size:16px;font-weight:700;}
+  .dbhead #dbSub{color:#9aa;font-size:12px;font-weight:500;}
+  .dbhead #dbClose{margin-left:auto;background:#b81212;border:none;color:#fff;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;}
+  .dbbody{flex:1;overflow:auto;padding:18px 22px;}
+  .dbbody h4{margin:18px 0 8px;color:#8fd49a;font-size:13px;text-transform:uppercase;letter-spacing:.5px;}
+  .dbmetrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .dbmetric{background:#151515;border:1px solid #262626;border-radius:10px;padding:12px 14px;}
+  .dbmetric .k{font-size:11px;color:#9aa;letter-spacing:.4px;}
+  .dbmetric .v{font-size:22px;font-weight:800;margin-top:3px;}
+  .dbtimeline{font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.7;}
+  .dbrow{display:flex;gap:12px;padding:2px 0;border-bottom:1px solid #1a1a1a;}
+  .dbrow .tt{color:#7fd1ff;min-width:64px;text-align:right;}
+  .dbrow.ok .lb{color:#8fe08f;} .dbrow.warn .lb{color:#ffb454;}
+  .dbmetric.warn{border-color:#7a4a12;} .dbmetric.warn .v{color:#ffb454;}
+
   /* ---------- Camera role ---------- */
   #camera{display:none;height:100%;position:relative;background:#000;}
   #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
@@ -464,6 +482,28 @@
       </div>
       <div class="log" id="scnLog">No scenario recorded.</div>
     </div>
+
+    <div class="box">
+      <h3>Physiology &amp; Debrief</h3>
+      <div class="toggle" style="margin-bottom:10px"><div class="switch" id="swAutoPhys"></div><span>Auto physiology (react to therapy)</span></div>
+      <div style="font-size:11px;color:var(--dim);margin:-4px 0 12px">When on: pulseless rhythms deteriorate (SpO₂, EtCO₂, BP fall); a successful shock or pacing capture drives recovery.</div>
+      <div class="scn">
+        <button class="play" id="btnScenStart">▶ Start scenario</button>
+        <button id="btnDebrief">📋 Debrief</button>
+      </div>
+      <div class="log" id="dbgStatus">No scenario running.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEBRIEF OVERLAY ============ -->
+<div id="debrief" class="debrief">
+  <div class="dbhead"><b>Scenario Debrief</b><span id="dbSub"></span><button id="dbClose">✕ Close</button></div>
+  <div class="dbbody">
+    <div class="dbmetrics" id="dbMetrics"></div>
+    <h4>Timeline</h4>
+    <div class="dbtimeline" id="dbTimeline"></div>
+    <button class="cyclebtn" id="dbCopy" style="margin-top:14px">⧉ Copy log</button>
   </div>
 </div>
 
@@ -498,11 +538,13 @@ const STATE = {
   sys:120, dia:80, temp:98.6, pulse:false, pea:false, aline:false, perfusion:100,
   patient:"Adult",
   // defibrillation / cardioversion
-  shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0,
+  shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0, lastShockRhythm:"",
   // transcutaneous pacing
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
-  stemiSite:"anterior", ecg12Seq:0
+  stemiSite:"anterior", ecg12Seq:0,
+  // closed-loop physiology (instructor authority = control)
+  autoPhys:false
 };
 
 /* ---------- room + role ---------- */
@@ -1021,7 +1063,7 @@ function runMonitor(){
       flashMsg("CHARGED · "+STATE.shockEnergy+" J — ready to shock",1800,"#ff8a3a"); }, dur*1000);
   }
   function monShock(){     // deliver energy: artifact + rhythm conversion (synced via shockSeq)
-    STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy;
+    STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       STATE.rhythm="sinus"; STATE.hr=90; STATE.pea=false;
@@ -1419,6 +1461,7 @@ function runControl(){
     document.getElementById("swSync").classList.toggle("on",STATE.sync);
     document.getElementById("swAutoConv").classList.toggle("on",STATE.autoConvert);
     document.getElementById("swPacer").classList.toggle("on",STATE.pacerOn);
+    {const ap=document.getElementById("swAutoPhys"); if(ap) ap.classList.toggle("on",STATE.autoPhys);}
     document.getElementById("lEnergy").textContent=STATE.shockEnergy;
     [...document.getElementById("energyBtns").children].forEach(c=>c.classList.toggle("active",+c.dataset.j===STATE.shockEnergy));
     const ss=document.getElementById("stemiSite"); if(ss&&STATE.stemiSite) ss.value=STATE.stemiSite;
@@ -1440,7 +1483,7 @@ function runControl(){
   document.getElementById("swSync").onclick=e=>{STATE.sync=!STATE.sync;e.target.classList.toggle("on",STATE.sync);push("SYNC "+(STATE.sync?"on":"off"));};
   document.getElementById("swAutoConv").onclick=e=>{STATE.autoConvert=!STATE.autoConvert;e.target.classList.toggle("on",STATE.autoConvert);push(null);};
   document.getElementById("btnShock").onclick=()=>{
-    STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy;
+    STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     let lab=(STATE.sync?"Cardiovert ":"Shock ")+STATE.shockEnergy+"J";
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
@@ -1510,12 +1553,13 @@ function runControl(){
   };
 
   /* ---- scenario recorder ---- */
-  let recording=false, recStart=0, script=[], playing=false, timers=[];
+  let recording=false, recStart=0, script=[], playing=false, timers=[], logHook=null;
   const logEl=document.getElementById("scnLog");
   function logRender(){ if(!script.length){logEl.textContent= recording?"● recording…":"No scenario recorded.";return;}
     logEl.innerHTML=script.map(s=>`+${s.t.toFixed(1)}s — ${s.label||"vitals"}`).join("<br>");}
   function push(label){
     broadcast();
+    if(logHook) logHook();     // record competency events immediately for control-side actions
     if(recording){script.push({t:(performance.now()-recStart)/1000,label,state:JSON.parse(JSON.stringify(STATE))});logRender();}
   }
   document.getElementById("btnRec").onclick=function(){
@@ -1537,6 +1581,107 @@ function runControl(){
   document.getElementById("btnStop").onclick=()=>{playing=false;timers.forEach(clearTimeout);timers=[];logRender();};
   document.getElementById("btnClear").onclick=()=>{script=[];recording=false;
     document.getElementById("btnRec").textContent="● Record";logRender();};
+
+  /* =====================================================================
+     CLOSED-LOOP PHYSIOLOGY (control = authority) + COMPETENCY DEBRIEF LOG
+     ===================================================================== */
+  const pulseless =()=> STATE.pea||STATE.rhythm==="vfib"||STATE.rhythm==="asystole";
+  const capturedNow=()=> STATE.pacerOn && STATE.pacerMa>=STATE.captureMa && STATE.rhythm!=="vfib";
+  let recoverUntil=0, wasPulse=pulseless(), wasCap=capturedNow();
+
+  function physTick(){
+    if(!STATE.autoPhys) return;
+    const now=performance.now();
+    const ap=(c,t,k)=>Math.round(c+(t-c)*k);
+    if(pulseless()){                       // untreated arrest → deteriorate
+      STATE.spo2 =Math.max(25,ap(STATE.spo2,25,0.06));
+      STATE.etco2=Math.max(8, ap(STATE.etco2,10,0.06));
+      STATE.sys  =Math.max(0, ap(STATE.sys,0,0.4));
+      STATE.dia  =Math.max(0, ap(STATE.dia,0,0.4));
+    } else if(now<recoverUntil){           // after ROSC / capture → recover
+      STATE.spo2 =Math.min(98,ap(STATE.spo2,97,0.07));
+      STATE.etco2=ap(STATE.etco2,37,0.07);
+      STATE.sys  =ap(STATE.sys,110,0.07);
+      STATE.dia  =ap(STATE.dia,68,0.07);
+    } else return;                         // otherwise the instructor drives vitals
+    STATE.spo2=Math.max(0,Math.min(100,STATE.spo2)); STATE.etco2=Math.max(0,Math.min(100,STATE.etco2));
+    STATE.sys=Math.max(0,Math.min(260,STATE.sys)); STATE.dia=Math.max(0,Math.min(200,STATE.dia));
+    syncSliders(); broadcast();
+  }
+  setInterval(physTick,1000);
+  document.getElementById("swAutoPhys").onclick=e=>{
+    STATE.autoPhys=!STATE.autoPhys; e.currentTarget.classList.toggle("on",STATE.autoPhys);
+    push("Auto physiology "+(STATE.autoPhys?"ON":"OFF"));
+  };
+
+  // competency event log — diffs shared state, so it catches actions from EITHER device
+  const rl=k=>(RHYTHMS[k]&&RHYTHMS[k].label)||k;
+  const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
+  let dbgLog=[], dbgT0=null, dbgTimer=null;
+  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
+  const dEvent=(label,cls)=>{ if(dbgT0==null)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
+  function watchForLog(){
+    if((STATE.shockSeq||0)>seen.shk){ seen.shk=STATE.shockSeq;
+      const rhy=STATE.lastShockRhythm||"", sync=STATE.sync;
+      const good=(sync&&["svt","afib"].includes(rhy))||(!sync&&["vfib","vt"].includes(rhy));
+      dEvent((sync?"Cardiovert ":"Defib ")+STATE.lastShockEnergy+" J on "+rl(rhy), good?"ok":"warn"); }
+    if(STATE.rhythm!==seen.rhythm){
+      const wasDead=["vfib","asystole"].includes(seen.rhythm), nowLive=!["vfib","asystole"].includes(STATE.rhythm);
+      dEvent((wasDead&&nowLive)?"ROSC — organized rhythm ("+rl(STATE.rhythm)+")":"Rhythm → "+rl(STATE.rhythm), (wasDead&&nowLive)?"ok":"");
+      seen.rhythm=STATE.rhythm; }
+    if(STATE.pacerOn!==seen.pacerOn){ seen.pacerOn=STATE.pacerOn; dEvent("Pacer "+(STATE.pacerOn?"ON @ "+STATE.pacerRate+" ppm":"OFF")); }
+    const cap=capturedNow();
+    if(cap!==seen.cap){ seen.cap=cap; if(cap) dEvent("Pacing capture achieved ("+STATE.pacerMa+" mA)","ok"); }
+    if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP measured"); }
+    if((STATE.ecg12Seq||0)>seen.tw){ seen.tw=STATE.ecg12Seq; dEvent("12-lead acquired ["+(STATE.stemiSite||"—")+"]"); }
+    const pl=pulseless();
+    if(wasPulse&&!pl) recoverUntil=performance.now()+30000;               // ROSC → recovery ramp
+    if(!wasCap&&cap&&STATE.sys<90) recoverUntil=performance.now()+25000;   // capture restores perfusion
+    wasPulse=pl; wasCap=cap;
+    syncSliders();
+  }
+  onState.push(watchForLog);
+  logHook=watchForLog;         // let push() log immediately for control-initiated actions
+
+  function dbgStatusRender(){
+    const el=document.getElementById("dbgStatus");
+    el.innerHTML = dbgT0==null ? "No scenario running."
+      : "● Recording · "+fmt((performance.now()-dbgT0)/1000)+" · "+dbgLog.length+" events";
+  }
+  document.getElementById("btnScenStart").onclick=()=>{
+    dbgLog=[]; dbgT0=performance.now();
+    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
+    dEvent("Scenario start — "+rl(STATE.rhythm));
+    if(!dbgTimer) dbgTimer=setInterval(dbgStatusRender,1000);
+  };
+  const metric=(k,v,warn)=>`<div class="dbmetric${warn?" warn":""}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  function renderDebrief(){
+    const dur=dbgT0==null?0:(performance.now()-dbgT0)/1000;
+    const shocks=dbgLog.filter(e=>/^Defib|^Cardiovert/.test(e.label));
+    const bad=shocks.filter(e=>e.cls==="warn").length;
+    const first=shocks[0], rosc=dbgLog.find(e=>/^ROSC/.test(e.label));
+    const cap=dbgLog.find(e=>/capture achieved/.test(e.label)), tw=dbgLog.find(e=>/12-lead/.test(e.label));
+    let m="";
+    m+=metric("Scenario length",fmt(dur));
+    m+=metric("Shocks delivered",shocks.length+(bad?"  ("+bad+"⚠)":""),bad>0);
+    m+=metric("Time to 1st shock",first?fmt(first.t):"—");
+    m+=metric("ROSC",rosc?"at "+fmt(rosc.t):"not achieved",!rosc);
+    m+=metric("Pacing capture",cap?"at "+fmt(cap.t):"—");
+    m+=metric("12-lead acquired",tw?"at "+fmt(tw.t):"—");
+    document.getElementById("dbMetrics").innerHTML=m;
+    document.getElementById("dbSub").textContent = dbgT0==null
+      ? "Press Start scenario first to record a run" : "Room "+ROOM+" · "+new Date().toLocaleString();
+    document.getElementById("dbTimeline").innerHTML = dbgLog.length
+      ? dbgLog.map(e=>`<div class="dbrow ${e.cls}"><span class="tt">+${fmt(e.t)}</span><span class="lb">${e.label}</span></div>`).join("")
+      : '<div style="color:#888">No events logged.</div>';
+    document.getElementById("debrief").classList.add("show");
+  }
+  document.getElementById("btnDebrief").onclick=renderDebrief;
+  document.getElementById("dbClose").onclick=()=>document.getElementById("debrief").classList.remove("show");
+  document.getElementById("dbCopy").onclick=()=>{
+    const txt="FOAMfrat Sim debrief — "+new Date().toLocaleString()+"\n"+dbgLog.map(e=>"+"+fmt(e.t)+"  "+e.label).join("\n");
+    if(navigator.clipboard) navigator.clipboard.writeText(txt).catch(()=>{});
+  };
 
   syncSliders();
   setupCameraFeed();           // live video panel (viewer side)
