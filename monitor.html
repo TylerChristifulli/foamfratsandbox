@@ -575,7 +575,7 @@ const RHYTHMS={
   sinus:        {label:"Sinus",        hr:80,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_brady:  {label:"Sinus Brady",  hr:45,  p:.15, pr:.18, qrs:.09, r:1.2, st:0,    t:.30, irregular:0},
   sinus_tach:   {label:"Sinus Tach",   hr:130, p:.12, pr:.14, qrs:.08, r:1.1, st:0,    t:.25, irregular:0},
-  svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.03, t:.20, irregular:0},
+  svt:          {label:"SVT",          hr:180, p:0,   pr:0,   qrs:.07, r:1.05,st:-.02, t:.20, irregular:0},
   afib:         {label:"A-Fib",        hr:110, p:0,   pr:.12, qrs:.09, r:1.1, st:0,    t:.28, irregular:.35},
   vt:           {label:"V-Tach",       hr:180, p:0,   pr:0,   qrs:.18, r:1.4, st:0,    t:-.4, irregular:.03, vtmorph:1},
   vfib:         {label:"V-Fib",        hr:0,   special:"vf"},
@@ -702,9 +702,11 @@ class EcgEngine{
     // ST segment + T wave — QT shortens with rate (Bazett-like) so the T stays
     // fully inside the beat at fast rates instead of getting clipped
     const tScale=Math.max(0.5,Math.min(1.1,Math.sqrt(this.beatLen/0.75)));
-    const stStart=sc+0.02, tC=pr+0.27*tScale;
+    const stStart=sc+0.02, tC=pr+0.23*tScale;
     if(tau>stStart && tau<tC) v+=c.st;            // ST offset
-    v+=gauss(tau,tC,Math.max(0.07,0.075*tScale),c.t);  // broad, rounded T (never spiky), even at fast rates
+    // asymmetric T: quicker upstroke, gentle prolonged downslope that eases back to baseline
+    const tRise=0.05+0.008*tScale, tFall=0.075+0.02*tScale;
+    v+=c.t*Math.exp(-0.5*Math.pow((tau-tC)/(tau<tC?tRise:tFall),2));
     return v;
   }
 }
