@@ -1614,34 +1614,44 @@ function runControl(){
     push("Auto physiology "+(STATE.autoPhys?"ON":"OFF"));
   };
 
-  // competency event log — diffs shared state, so it catches actions from EITHER device
+  // competency event log
   const rl=k=>(RHYTHMS[k]&&RHYTHMS[k].label)||k;
+  const dead=r=>["vfib","asystole"].includes(r), arrest=r=>["vfib","asystole","pea"].includes(r);
   const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
   let dbgLog=[], dbgT0=null, dbgTimer=null;
-  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
+  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};   // monotonic counters
+  let seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};       // authoritative levels
   const dEvent=(label,cls)=>{ if(dbgT0==null)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
+
+  // LOCAL logger — runs on authoritative control actions (via push); no echo flip-flop
+  function logLocal(){
+    if(dbgT0==null){ seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()}; return; }
+    if(STATE.rhythm!==seenL.rhythm){
+      if(dead(seenL.rhythm)&&!dead(STATE.rhythm)){ dEvent("ROSC — organized rhythm ("+rl(STATE.rhythm)+")","ok"); recoverUntil=performance.now()+30000; }
+      else dEvent("Rhythm → "+rl(STATE.rhythm));
+      seenL.rhythm=STATE.rhythm;
+    }
+    if(STATE.pacerOn!==seenL.pacerOn){ seenL.pacerOn=STATE.pacerOn; dEvent("Pacer "+(STATE.pacerOn?"ON @ "+STATE.pacerRate+" ppm":"OFF")); }
+    const cap=capturedNow();
+    if(cap!==seenL.cap){ seenL.cap=cap; if(cap){ dEvent("Pacing capture achieved ("+STATE.pacerMa+" mA)","ok"); if(STATE.sys<90) recoverUntil=performance.now()+25000; } }
+  }
+  // REMOTE watcher — only monotonic counters (never revert), so it safely catches monitor-side actions
   function watchForLog(){
     if((STATE.shockSeq||0)>seen.shk){ seen.shk=STATE.shockSeq;
       const rhy=STATE.lastShockRhythm||"", sync=STATE.sync;
       const good=(sync&&["svt","afib"].includes(rhy))||(!sync&&["vfib","vt"].includes(rhy));
-      dEvent((sync?"Cardiovert ":"Defib ")+STATE.lastShockEnergy+" J on "+rl(rhy), good?"ok":"warn"); }
-    if(STATE.rhythm!==seen.rhythm){
-      const wasDead=["vfib","asystole"].includes(seen.rhythm), nowLive=!["vfib","asystole"].includes(STATE.rhythm);
-      dEvent((wasDead&&nowLive)?"ROSC — organized rhythm ("+rl(STATE.rhythm)+")":"Rhythm → "+rl(STATE.rhythm), (wasDead&&nowLive)?"ok":"");
-      seen.rhythm=STATE.rhythm; }
-    if(STATE.pacerOn!==seen.pacerOn){ seen.pacerOn=STATE.pacerOn; dEvent("Pacer "+(STATE.pacerOn?"ON @ "+STATE.pacerRate+" ppm":"OFF")); }
-    const cap=capturedNow();
-    if(cap!==seen.cap){ seen.cap=cap; if(cap) dEvent("Pacing capture achieved ("+STATE.pacerMa+" mA)","ok"); }
+      dEvent((sync?"Cardiovert ":"Defib ")+STATE.lastShockEnergy+" J on "+rl(rhy), good?"ok":"warn");
+      // shock that converted a lethal rhythm → ROSC (guard: skip if logLocal already logged it)
+      if(arrest(rhy)&&!arrest(STATE.rhythm)&&dead(seenL.rhythm)){
+        dEvent("ROSC — organized rhythm ("+rl(STATE.rhythm)+")","ok"); recoverUntil=performance.now()+30000; seenL.rhythm=STATE.rhythm;
+      }
+    }
     if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP measured"); }
     if((STATE.ecg12Seq||0)>seen.tw){ seen.tw=STATE.ecg12Seq; dEvent("12-lead acquired ["+(STATE.stemiSite||"—")+"]"); }
-    const pl=pulseless();
-    if(wasPulse&&!pl) recoverUntil=performance.now()+30000;               // ROSC → recovery ramp
-    if(!wasCap&&cap&&STATE.sys<90) recoverUntil=performance.now()+25000;   // capture restores perfusion
-    wasPulse=pl; wasCap=cap;
     syncSliders();
   }
   onState.push(watchForLog);
-  logHook=watchForLog;         // let push() log immediately for control-initiated actions
+  logHook=logLocal;            // push() logs authoritative level changes immediately
 
   function dbgStatusRender(){
     const el=document.getElementById("dbgStatus");
@@ -1650,7 +1660,8 @@ function runControl(){
   }
   document.getElementById("btnScenStart").onclick=()=>{
     dbgLog=[]; dbgT0=performance.now();
-    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
+    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
+    seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
     dEvent("Scenario start — "+rl(STATE.rhythm));
     if(!dbgTimer) dbgTimer=setInterval(dbgStatusRender,1000);
   };
