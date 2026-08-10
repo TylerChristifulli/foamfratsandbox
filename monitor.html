@@ -703,7 +703,12 @@ class EcgEngine{
     // fully inside the beat at fast rates instead of getting clipped
     const tScale=Math.max(0.5,Math.min(1.1,Math.sqrt(this.beatLen/0.75)));
     const stStart=sc+0.02, tC=pr+0.23*tScale;
-    if(tau>stStart && tau<tC) v+=c.st;            // ST offset
+    if(c.st && tau>stStart && tau<tC){            // ST deviation with rounded shoulders (no notch)
+      const u=(tau-stStart)/(tC-stStart);
+      const ss=k=>{k=Math.max(0,Math.min(1,k));return k*k*(3-2*k);};
+      const w = u<0.3 ? ss(u/0.3) : u>0.7 ? ss((1-u)/0.3) : 1;
+      v += c.st*w;
+    }
     // asymmetric T: quicker upstroke, gentle prolonged downslope that eases back to baseline
     const tRise=0.05+0.008*tScale, tFall=0.075+0.02*tScale;
     v+=c.t*Math.exp(-0.5*Math.pow((tau-tC)/(tau<tC?tRise:tFall),2));
