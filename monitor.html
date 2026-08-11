@@ -41,6 +41,25 @@
     font-size:15px;font-weight:700;width:100%;}
   .btn.alt{background:#1d2b3a;color:#cfe8ff;}
   .ghost{background:transparent;border:1px solid #333;color:#bbb;border-radius:8px;padding:8px 12px;font-size:13px;}
+  /* version chip + release-notes modal */
+  .verchip{background:#121712;border:1px solid #2c3a2c;color:#9ec8a6;border-radius:20px;
+    padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s;}
+  .verchip:hover{border-color:var(--ecg);color:#dfffe6;}
+  .relmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:80;
+    align-items:center;justify-content:center;padding:18px;}
+  .relmodal.show{display:flex;}
+  .relcard{background:#111;border:1px solid #2a2a2a;border-radius:16px;max-width:760px;width:100%;
+    max-height:86vh;display:flex;flex-direction:column;text-align:left;}
+  .relhead{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid #242424;}
+  .relhead h3{margin:0;font-size:18px;color:#fff;}
+  .relhead .v{color:var(--ecg);font-size:13px;font-weight:700;}
+  .relhead .x{margin-left:auto;background:#b81212;border:none;color:#fff;border-radius:8px;
+    padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;}
+  .relbody{overflow:auto;padding:16px 22px;color:#d6d6d6;line-height:1.5;font-size:14px;}
+  .relbody h4{color:#8fd49a;margin:18px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;}
+  .relbody h4:first-child{margin-top:0;}
+  .relbody ul{margin:6px 0 0;padding-left:20px;} .relbody li{margin:5px 0;}
+  .relbody b{color:#fff;} .relbody .kick{color:var(--dim);font-size:12px;margin:0 0 6px;}
 
   /* ---------- Monitor (X Series style) ---------- */
   #monitor{display:none;height:100%;flex-direction:column;background:#000;}
@@ -293,6 +312,56 @@
     </div>
   </div>
   <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
+  <button class="verchip" id="verChip">v1.2 · What's new</button>
+</div>
+
+<!-- ============ RELEASE NOTES MODAL ============ -->
+<div id="relnotes" class="relmodal">
+  <div class="relcard">
+    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.2 · Aug 2026</span><button class="x" id="relClose">✕ Close</button></div>
+    <div class="relbody">
+      <p class="kick">A rolling summary of everything added and improved since launch.</p>
+
+      <h4>Connectivity &amp; reliability</h4>
+      <ul>
+        <li><b>Fixed "connecting forever."</b> Devices now sync through multiple servers at once, so they pair reliably on restrictive, guest, and international networks.</li>
+        <li>Clear failure message if no server is reachable, instead of an endless "connecting…".</li>
+      </ul>
+
+      <h4>New rhythms</h4>
+      <ul>
+        <li><b>SVT</b> — narrow-complex tach (156 bpm), no P waves; converts with synchronized cardioversion.</li>
+        <li><b>Junctional</b>, and <b>bundle branch blocks</b> — RBBB (rSR′ rabbit-ears) and LBBB (broad notched R), both with a discordant T.</li>
+        <li><b>Hyperkalemia progression</b> — peaked T → flat P → wide QRS → sine wave.</li>
+      </ul>
+
+      <h4>Waveform &amp; 12-lead realism</h4>
+      <ul>
+        <li>Rate-aware T waves (no clipping at fast rates); Mobitz I vs II now distinct; V-Tach is wide, continuous and monomorphic.</li>
+        <li>Rebuilt capnography and SpO₂ pleth waveforms; realistic coved/"tombstone" 12-lead ST elevation with selectable STEMI territory.</li>
+      </ul>
+
+      <h4>Defibrillation &amp; pacing</h4>
+      <ul>
+        <li>ZOLL-style <b>1 Energy → 2 Charge → 3 Shock</b> workflow with charge/ready tones; Shock arms only once charged.</li>
+        <li>Transcutaneous pacing with a control-room-set capture threshold the clinician must reach.</li>
+      </ul>
+
+      <h4>Physiology &amp; debrief</h4>
+      <ul>
+        <li><b>Auto-physiology</b> — the patient deteriorates in arrest and recovers after a successful shock or pacing capture (EtCO₂ rises with ROSC).</li>
+        <li><b>Competency debrief log</b> — timestamped record of shocks, pacing, NIBP, 12-leads, ROSC and vitals, with a metrics screen and copy-log.</li>
+      </ul>
+
+      <h4>Control room &amp; usability</h4>
+      <ul>
+        <li>Type exact vital values; Temperature in °C or °F; hide EtCO₂; per-vital trend clocks (⏱).</li>
+        <li>No diagnosis labels on the monitor (learners recognize the rhythm and check a pulse); tighter layout; "Suggest an Edit" box.</li>
+      </ul>
+
+      <p class="kick" style="margin-top:16px">Have feedback or a rhythm you'd like added? Use the "Suggest an Edit" box in the Control Room.</p>
+    </div>
+  </div>
 </div>
 
 <!-- ============ MONITOR (X Series style) ============ -->
@@ -1886,6 +1955,13 @@ function start(role){
   else runControl();
 }
 (function init(){
+  // release-notes modal
+  const rel=document.getElementById("relnotes");
+  document.getElementById("verChip").onclick=()=>rel.classList.add("show");
+  document.getElementById("relClose").onclick=()=>rel.classList.remove("show");
+  rel.addEventListener("click",e=>{ if(e.target===rel) rel.classList.remove("show"); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") rel.classList.remove("show"); });
+
   const inp=document.getElementById("roomInput"); inp.value=ROOM;
   inp.oninput=()=>{ROOM=(inp.value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");};
   document.getElementById("genRoom").onclick=()=>{ROOM=randRoom();inp.value=ROOM;};
