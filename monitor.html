@@ -403,13 +403,13 @@
     <div class="box">
       <h3>Vital Signs</h3>
       <div class="field"><label>Heart Rate <b id="lHr">80</b> bpm</label><input type="range" id="sHr" min="0" max="250" value="80"></div>
-      <div class="field"><label>SpO₂ <b id="lSpo2">98</b> %</label><input type="range" id="sSpo2" min="50" max="100" value="98"></div>
+      <div class="field"><label>SpO₂ <b id="lSpo2">98</b> %</label><input type="range" id="sSpo2" min="0" max="100" value="98"></div>
       <div class="field"><label>Perfusion (pleth amplitude) <b id="lPerf">100</b> %</label><input type="range" id="sPerf" min="0" max="100" value="100"></div>
       <div class="field"><label>Resp Rate <b id="lRr">16</b> /min</label><input type="range" id="sRr" min="0" max="60" value="16"></div>
       <div class="field"><label>EtCO₂ <b id="lEtco2">38</b> mmHg</label><input type="range" id="sEtco2" min="0" max="100" value="38"></div>
-      <div class="field"><label>Systolic <b id="lSys">120</b> mmHg</label><input type="range" id="sSys" min="40" max="250" value="120"></div>
-      <div class="field"><label>Diastolic <b id="lDia">80</b> mmHg</label><input type="range" id="sDia" min="20" max="150" value="80"></div>
-      <div class="field"><label>Temp <b id="lTemp">98.6</b> °F</label><input type="range" id="sTemp" min="86" max="108" step="0.1" value="98.6"></div>
+      <div class="field"><label>Systolic <b id="lSys">120</b> mmHg</label><input type="range" id="sSys" min="0" max="300" value="120"></div>
+      <div class="field"><label>Diastolic <b id="lDia">80</b> mmHg</label><input type="range" id="sDia" min="0" max="200" value="80"></div>
+      <div class="field"><label>Temp <b id="lTemp">98.6</b> <span id="tempUnit">°F</span> <button class="cyclebtn" id="btnTempUnit" style="padding:2px 8px;font-size:11px;margin-left:4px">°C</button></label><input type="range" id="sTemp" min="86" max="108" step="0.1" value="98.6"></div>
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:4px">
         <button class="cyclebtn" id="btnNibp">🩺 Cycle NIBP</button>
         <select id="nibpAuto" class="sel">
@@ -458,6 +458,9 @@
       </div>
       <div style="margin-top:10px" class="toggle">
         <div class="switch" id="swPea"></div><span>Pulseless (PEA) — electrical activity, no pulse</span>
+      </div>
+      <div style="margin-top:10px" class="toggle">
+        <div class="switch on" id="swEtco2"></div><span>Show EtCO₂ on monitor</span>
       </div>
     </div>
 
@@ -568,7 +571,9 @@ const STATE = {
   // 12-lead
   stemiSite:"anterior", ecg12Seq:0,
   // closed-loop physiology (instructor authority = control)
-  autoPhys:false
+  autoPhys:false,
+  // display options
+  tempC:false, etco2On:true
 };
 
 /* ---------- room + role ---------- */
@@ -583,48 +588,68 @@ let ROLE=params.get("role")||null;
 const TOPIC=()=>`foamfrat/simmon/${ROOM}/state`;
 const RTOPIC=()=>`foamfrat/simmon/${ROOM}/rtc`;     // WebRTC signaling channel
 const CLIENTID=Math.random().toString(16).slice(2,10);
-let mqttClient=null, bc=null, connected=false;
-const onState=[], onSignal=[];
+// Connect through several public brokers at once — devices sync as long as they
+// share ANY one reachable broker (fixes "connecting forever" on restrictive/intl networks).
+const BROKERS=[
+  "wss://broker.emqx.io:8084/mqtt",
+  "wss://broker.hivemq.com:8884/mqtt",
+  "wss://test.mosquitto.org:8081/mqtt"
+];
+let mqttPool=[], bc=null;
+const onState=[], onSignal=[], seenSignals=[];
+function anyConnected(){ return mqttPool.some(c=>c&&c.connected); }
 
 function broadcast(){
   const payload=JSON.stringify(STATE);
-  try{ if(mqttClient&&mqttClient.connected) mqttClient.publish(TOPIC(),payload,{retain:true}); }catch(e){}
+  mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(TOPIC(),payload,{retain:true}); }catch(e){} });
   try{ if(bc) bc.postMessage(payload); }catch(e){}
 }
 function applyState(obj){ Object.assign(STATE,obj); onState.forEach(f=>f()); }
-// WebRTC signaling: small JSON messages (offer/answer/ice) tagged with sender id
+// WebRTC signaling: small JSON messages (offer/answer/ice), sender-tagged + id'd for cross-broker dedupe
 function sendSignal(obj){
-  obj.from=CLIENTID;
-  try{ if(mqttClient&&mqttClient.connected) mqttClient.publish(RTOPIC(),JSON.stringify(obj)); }catch(e){}
+  obj.from=CLIENTID; obj.sid=Math.random().toString(16).slice(2,10);
+  const s=JSON.stringify(obj);
+  mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(RTOPIC(),s); }catch(e){} });
 }
 
 function connect(){
   // BroadcastChannel = instant same-device sync (two tabs/windows)
   try{ bc=new BroadcastChannel("foamfrat-"+ROOM);
        bc.onmessage=e=>{ try{applyState(JSON.parse(e.data));}catch(_){}}; }catch(e){}
-  // MQTT = cross-device over the internet
-  try{
-    mqttClient=mqtt.connect("wss://broker.emqx.io:8084/mqtt",
-      {clientId:"ff_"+ROLE+"_"+Math.random().toString(16).slice(2,8),
-       reconnectPeriod:2000,connectTimeout:8000});
-    mqttClient.on("connect",()=>{
-      connected=true; setConn(true);
-      mqttClient.subscribe(TOPIC()); mqttClient.subscribe(RTOPIC());
-      if(ROLE==="control") broadcast();           // push current state to monitor
+  // MQTT over WSS across multiple brokers for resilience
+  BROKERS.forEach((url,i)=>{
+    let c; try{
+      c=mqtt.connect(url,{clientId:"ff_"+ROLE+"_"+i+"_"+Math.random().toString(16).slice(2,7),
+        reconnectPeriod:3000, connectTimeout:9000, keepalive:30, clean:true});
+    }catch(e){ return; }
+    mqttPool[i]=c;
+    c.on("connect",()=>{
+      setConn(true);
+      try{ c.subscribe(TOPIC()); c.subscribe(RTOPIC()); }catch(e){}
+      if(ROLE==="control") broadcast();          // push current state to monitor
     });
-    mqttClient.on("reconnect",()=>setConn(false));
-    mqttClient.on("close",()=>{connected=false;setConn(false);});
-    mqttClient.on("message",(t,msg)=>{
+    c.on("reconnect",()=>setConn(anyConnected()));
+    c.on("close",  ()=>setConn(anyConnected()));
+    c.on("error",  ()=>{});                        // keep the other brokers trying
+    c.on("message",(t,msg)=>{
       const topic=t.toString();
       if(topic===RTOPIC()){
-        try{ const m=JSON.parse(msg.toString()); if(m.from!==CLIENTID) onSignal.forEach(f=>f(m)); }catch(_){}
+        try{ const m=JSON.parse(msg.toString());
+          if(m.from===CLIENTID) return;
+          if(m.sid){ if(seenSignals.indexOf(m.sid)>=0) return; seenSignals.push(m.sid); if(seenSignals.length>256) seenSignals.shift(); }
+          onSignal.forEach(f=>f(m)); }catch(_){}
       } else {
         try{ applyState(JSON.parse(msg.toString())); }catch(_){}
       }
     });
-  }catch(e){ setConn(false); }
+  });
+  setConn(false);
+  // if nothing connects, say so plainly instead of an endless "connecting…"
+  setTimeout(()=>{ if(!anyConnected()){ const p=document.getElementById("cConn");
+    if(p){ p.textContent="⚠ can't reach sync server — check Wi-Fi / firewall, then reload"; p.classList.remove("on"); } } }, 13000);
 }
 function setConn(ok){
+  ok=!!ok||anyConnected();
   const dot=document.getElementById("mDot"); if(dot) dot.classList.toggle("on",ok);
   const pill=document.getElementById("cConn");
   if(pill){ pill.textContent=ok?"● connected · room "+ROOM:"connecting…"; pill.classList.toggle("on",ok); }
@@ -655,7 +680,13 @@ const RHYTHMS={
   pvc:          {label:"Sinus + PVCs", hr:75,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, pvc:.2},
   pac:          {label:"Sinus + PACs", hr:75,  p:.15, pr:.16, qrs:.09, r:1.2, st:0,    t:.30, pac:.2},
   paced:        {label:"Paced",        hr:70,  p:0,   pr:0,   qrs:.14, r:1.0, st:0,    t:.30, paced:1, wide:1},
-  ischemia:     {label:"Ischemia",     hr:92,  p:.15, pr:.16, qrs:.09, r:1.2, st:-.18, t:-.2, irregular:0}
+  ischemia:     {label:"Ischemia",     hr:92,  p:.15, pr:.16, qrs:.09, r:1.2, st:-.18, t:-.2, irregular:0},
+  junctional:   {label:"Junctional",   hr:50,  p:0,   pr:0,   qrs:.08, r:1.0, st:0,    t:.28, irregular:0},
+  rbbb:         {label:"RBBB",          hr:78,  p:.15, pr:.16, qrs:.14, r:1.0, st:0,    t:-.22,irregular:0, wide:1, rbbb:1},
+  lbbb:         {label:"LBBB",          hr:78,  p:.15, pr:.16, qrs:.16, r:1.2, st:0,    t:-.26,irregular:0, wide:1, lbbb:1},
+  hyperk_t:     {label:"HyperK: peaked T", hr:78, p:.08, pr:.16, qrs:.10, r:1.1, st:0,  t:.60, irregular:0, peakedT:1},
+  hyperk_wide:  {label:"HyperK: wide QRS", hr:70, p:0,  pr:0,   qrs:.16, r:1.0, st:0,   t:.55, irregular:0, wide:1, peakedT:1},
+  hyperk_sine:  {label:"HyperK: sine wave", hr:60, special:"sine"}
 };
 
 class EcgEngine{
@@ -670,8 +701,9 @@ class EcgEngine{
   effHr(){ // HR shown follows slider but rhythm/pacing imposes character
     if(this.cap()) return STATE.pacerRate;
     const c=this.cfg();
-    if(c.special) return STATE.rhythm==="vfib"? (250+Math.random()*40)|0 : 0;
-    return STATE.hr;
+    if(c.special==="vf") return (250+Math.random()*40)|0;
+    if(c.special==="asys") return 0;
+    return STATE.hr;   // sine (severe hyperK) still has a rate
   }
   scheduleNext(first){
     // electrical capture from pacing overrides intrinsic rhythm
@@ -726,6 +758,10 @@ class EcgEngine{
       let v=spike; v+=Math.sin(this.t*38+1)*0.4; v+=Math.sin(this.t*61+2)*0.3;
       v+=Math.sin(this.t*97)*0.2; v+=(Math.random()-0.5)*0.25; return v*0.8;
     }
+    if(!cap && c.special==="sine"){   // severe hyperkalemia — smooth continuous sine wave
+      const hrr=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hrr,20), x=(this.t%per)/per;
+      return spike + Math.sin(2*Math.PI*x-0.6)*0.85 + Math.sin(4*Math.PI*x)*0.10;
+    }
     const b=this.beat, tau=this.beatT; let v=spike;
     // captured paced beat: spike + wide paced QRS + discordant T
     if(b.pacedCapture){
@@ -760,6 +796,19 @@ class EcgEngine{
     if(c.p && !c.chb) v+=gauss(tau,0.05,0.022,c.p);
     if(c.paced) v+= (tau>0.01&&tau<0.02)? 1.6 : 0; // pacing spike
     const pr=(b.pr==null?0.16:b.pr);   // honor pr:0 (SVT/junctional) instead of falling back to 0.16
+    if(c.rbbb || c.lbbb){              // bundle branch block: wide QRS + discordant T
+      if(c.rbbb){                       // rSR' — small r, S, tall terminal R' (rabbit ears)
+        v+=gauss(tau,pr+0.01,0.012,0.28);
+        v+=gauss(tau,pr+0.045,0.016,-0.35);
+        v+=gauss(tau,pr+0.09,0.024,0.95);
+      } else {                          // LBBB — broad, notched monophasic R
+        v+=gauss(tau,pr+0.02,0.030,1.05);
+        v+=gauss(tau,pr+0.075,0.030,0.85);
+      }
+      const tCb=pr+0.32;
+      v+=c.t*Math.exp(-0.5*Math.pow((tau-tCb)/0.08,2));   // discordant (inverted) T
+      return v;
+    }
     const qc=pr, rc=pr+0.025, sc=pr+0.055;
     const wide=c.wide?1.9:1;
     v+=gauss(tau,qc,0.012*wide,-0.12);
@@ -775,8 +824,9 @@ class EcgEngine{
       const w = u<0.3 ? ss(u/0.3) : u>0.7 ? ss((1-u)/0.3) : 1;
       v += c.st*w;
     }
-    // asymmetric T: quicker upstroke, gentle prolonged downslope that eases back to baseline
-    const tRise=0.05+0.008*tScale, tFall=0.075+0.02*tScale;
+    // asymmetric T; hyperK peaks it into a tall, tented, narrow T
+    const pkT=c.peakedT?0.55:1;
+    const tRise=(0.05+0.008*tScale)*pkT, tFall=(0.075+0.02*tScale)*pkT;
     v+=c.t*Math.exp(-0.5*Math.pow((tau-tC)/(tau<tC?tRise:tFall),2));
     return v;
   }
@@ -848,7 +898,7 @@ function runMonitor(){
   // Capnography (mmHg), peak = EtCO2
   let co2Phase=0;
   function co2Val(){
-    if(!active.co2) return null;            // channel not activated
+    if(!active.co2 || STATE.etco2On===false) return null;   // channel off, or EtCO₂ hidden by control
     if(STATE.rr<1) return 0;
     const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
     // Realistic capnogram. Phase boundaries as fractions of the breath cycle.
@@ -974,9 +1024,13 @@ function runMonitor(){
     else hrShow= STATE.rhythm==="asystole"?0 : (STATE.rhythm==="vfib"?"--":STATE.hr);
     setNum("nHr",hrShow);
     setNum("nSpo2", !active.pleth? "--" : (STATE.pea?"--":STATE.spo2));
-    setNum("nEtco2", active.co2? STATE.etco2 : "--");
-    document.getElementById("nRr").textContent= active.co2? STATE.rr : "--";
-    document.querySelector("#bTemp .val").textContent=STATE.temp.toFixed(1);
+    const co2Shown = active.co2 && STATE.etco2On!==false;
+    setNum("nEtco2", co2Shown? STATE.etco2 : "--");
+    document.getElementById("nRr").textContent= co2Shown? STATE.rr : "--";
+    { const ov=document.querySelector('.tapover[data-ch="co2"]'); if(ov) ov.style.display = (STATE.etco2On===false)?"none":""; }
+    { const c=STATE.tempC, tv=c?((STATE.temp-32)*5/9):STATE.temp;
+      document.querySelector("#bTemp .val").textContent=tv.toFixed(1);
+      const u=document.querySelector("#bTemp .u"); if(u) u.textContent=c?" °C":" °F"; }
     document.getElementById("mPatient").textContent=STATE.patient;
     renderNibp();
 
@@ -999,7 +1053,7 @@ function runMonitor(){
     // alarms (only on activated channels)
     alarm("nHr", active.ecg && ((!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole"));
     alarm("nSpo2", active.pleth && !STATE.pea && STATE.spo2<90);
-    alarm("nEtco2", active.co2 && (STATE.etco2<25||STATE.etco2>55));
+    alarm("nEtco2", active.co2 && STATE.etco2On!==false && (STATE.etco2<25||STATE.etco2>55));
     // No rhythm-naming banner: learners must recognize the rhythm and check a pulse
     // themselves (the numeric alarms still flag abnormal vitals without labeling the rhythm).
     document.getElementById("banner").style.display="none";
@@ -1215,6 +1269,8 @@ function leadValue(lead,t){
   const c=RHYTHMS[STATE.rhythm]||RHYTHMS.sinus, f=LEADF[lead]||0.6;
   if(c.special==="asys") return (Math.random()-0.5)*0.02;
   if(c.special==="vf") return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f);
+  if(c.special==="sine"){ const hr0=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hr0,20), x=(t%per)/per;
+    return (Math.sin(2*Math.PI*x-0.6)*0.85+Math.sin(4*Math.PI*x)*0.10)*f; }
   let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
   const beatLen=60/hr, tau=t%beatLen; let v=0;
   const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
@@ -1462,16 +1518,34 @@ function runControl(){
     ["sEtco2","etco2","lEtco2",1],["sSys","sys","lSys",1],["sDia","dia","lDia",1],["sTemp","temp","lTemp",1],
     ["sPerf","perfusion","lPerf",1],
     ["sPrate","pacerRate","lPrate",1],["sPma","pacerMa","lPma",1],["sCap","captureMa","lCap",1]];
+  const fToC=f=>(f-32)*5/9, cToF=c=>c*9/5+32;
+  const labVal=key=> key==="temp" ? (STATE.tempC?fToC(STATE.temp):STATE.temp).toFixed(1) : String(STATE[key]);
   map.forEach(([sid,key,lid])=>{
-    const s=document.getElementById(sid);
+    const s=document.getElementById(sid), lab=document.getElementById(lid);
     s.value=STATE[key];
     s.oninput=()=>{STATE[key]= key==="temp"?parseFloat(s.value):parseInt(s.value);
-      document.getElementById(lid).textContent= key==="temp"?STATE.temp.toFixed(1):STATE[key];
-      push(null);};
+      lab.textContent=labVal(key); push(null);};
+    // type an exact value (in addition to the slider)
+    lab.contentEditable="true"; lab.spellcheck=false; lab.style.cursor="text";
+    const commit=()=>{
+      let raw=parseFloat((lab.textContent||"").replace(/[^0-9.\-]/g,""));
+      if(isNaN(raw)){ lab.textContent=labVal(key); return; }
+      let v = key==="temp" ? (STATE.tempC?cToF(raw):raw) : Math.round(raw);
+      v=Math.max(+s.min, Math.min(+s.max, v));
+      STATE[key]=v; s.value=v; lab.textContent=labVal(key); push(null);
+    };
+    lab.addEventListener("blur",commit);
+    lab.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); lab.blur(); } });
   });
   function syncSliders(){map.forEach(([sid,key,lid])=>{
+    const lab=document.getElementById(lid);
     document.getElementById(sid).value=STATE[key];
-    document.getElementById(lid).textContent=key==="temp"?STATE.temp.toFixed(1):STATE[key];});}
+    if(document.activeElement!==lab) lab.textContent=labVal(key);});}
+  function updTempUnitUI(){ document.getElementById("tempUnit").textContent=STATE.tempC?"°C":"°F";
+    document.getElementById("btnTempUnit").textContent=STATE.tempC?"°F":"°C"; }
+  document.getElementById("btnTempUnit").onclick=()=>{ STATE.tempC=!STATE.tempC; updTempUnitUI(); syncSliders(); push(null); };
+  document.getElementById("swEtco2").onclick=e=>{ STATE.etco2On=!STATE.etco2On; e.currentTarget.classList.toggle("on",STATE.etco2On); push("EtCO₂ "+(STATE.etco2On?"shown":"hidden")); };
+  updTempUnitUI();
 
   // quick events
   const quick=[
@@ -1488,6 +1562,7 @@ function runControl(){
     b.onclick=()=>{fn();push(lab);};qb.appendChild(b);});
   function setMany(o){Object.assign(STATE,o);
     [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===STATE.rhythm));
+    {const e=document.getElementById("swEtco2"); if(e) e.classList.toggle("on",STATE.etco2On!==false); updTempUnitUI();}
     document.getElementById("swPulse").classList.toggle("on",STATE.pulse);
     document.getElementById("swPea").classList.toggle("on",STATE.pea);
     document.getElementById("swAline").classList.toggle("on",STATE.aline);
