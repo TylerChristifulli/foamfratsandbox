@@ -684,8 +684,9 @@ const RHYTHMS={
   junctional:   {label:"Junctional",   hr:50,  p:0,   pr:0,   qrs:.08, r:1.0, st:0,    t:.28, irregular:0},
   rbbb:         {label:"RBBB",          hr:78,  p:.15, pr:.16, qrs:.14, r:1.0, st:0,    t:-.22,irregular:0, wide:1, rbbb:1},
   lbbb:         {label:"LBBB",          hr:78,  p:.15, pr:.16, qrs:.16, r:1.2, st:0,    t:-.26,irregular:0, wide:1, lbbb:1},
-  hyperk_t:     {label:"HyperK: peaked T", hr:78, p:.08, pr:.16, qrs:.10, r:1.1, st:0,  t:.60, irregular:0, peakedT:1},
-  hyperk_wide:  {label:"HyperK: wide QRS", hr:70, p:0,  pr:0,   qrs:.16, r:1.0, st:0,   t:.55, irregular:0, wide:1, peakedT:1},
+  hyperk_t:     {label:"HyperK: peaked T", hr:78, p:.14, pr:.16, qrs:.09, r:1.1, st:0,  t:.90, irregular:0, peakedT:1},
+  hyperk_p:     {label:"HyperK: flat P",   hr:75, p:.04, pr:.24, qrs:.10, r:1.1, st:0,  t:.80, irregular:0, peakedT:1},
+  hyperk_wide:  {label:"HyperK: wide QRS", hr:70, p:0,  pr:0,   qrs:.16, r:1.0, st:0,   t:.65, irregular:0, wide:1, peakedT:1},
   hyperk_sine:  {label:"HyperK: sine wave", hr:60, special:"sine"}
 };
 
@@ -760,7 +761,7 @@ class EcgEngine{
     }
     if(!cap && c.special==="sine"){   // severe hyperkalemia — smooth continuous sine wave
       const hrr=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hrr,20), x=(this.t%per)/per;
-      return spike + Math.sin(2*Math.PI*x-0.6)*0.85 + Math.sin(4*Math.PI*x)*0.10;
+      return spike + Math.sin(2*Math.PI*x-0.6)*0.42 + Math.sin(4*Math.PI*x)*0.05;
     }
     const b=this.beat, tau=this.beatT; let v=spike;
     // captured paced beat: spike + wide paced QRS + discordant T
@@ -824,9 +825,10 @@ class EcgEngine{
       const w = u<0.3 ? ss(u/0.3) : u>0.7 ? ss((1-u)/0.3) : 1;
       v += c.st*w;
     }
-    // asymmetric T; hyperK peaks it into a tall, tented, narrow T
-    const pkT=c.peakedT?0.55:1;
-    const tRise=(0.05+0.008*tScale)*pkT, tFall=(0.075+0.02*tScale)*pkT;
+    // T wave; hyperK makes it tall, symmetric and narrow (tented)
+    let tRise,tFall;
+    if(c.peakedT){ tRise=tFall=0.030+0.004*tScale; }
+    else { tRise=0.05+0.008*tScale; tFall=0.075+0.02*tScale; }
     v+=c.t*Math.exp(-0.5*Math.pow((tau-tC)/(tau<tC?tRise:tFall),2));
     return v;
   }
@@ -1270,7 +1272,7 @@ function leadValue(lead,t){
   if(c.special==="asys") return (Math.random()-0.5)*0.02;
   if(c.special==="vf") return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f);
   if(c.special==="sine"){ const hr0=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hr0,20), x=(t%per)/per;
-    return (Math.sin(2*Math.PI*x-0.6)*0.85+Math.sin(4*Math.PI*x)*0.10)*f; }
+    return (Math.sin(2*Math.PI*x-0.6)*0.42+Math.sin(4*Math.PI*x)*0.05)*f; }
   let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
   const beatLen=60/hr, tau=t%beatLen; let v=0;
   const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
@@ -1297,7 +1299,7 @@ function leadValue(lead,t){
       const a=pr+0.06;
       if(tau>a && tau<tC){ const u=(tau-a)/(tC-a); const w=u<0.25?sm01(u/0.25):1; v+=st*w*(0.75+0.5*u); }
     }
-    v+=gauss(tau,tC,0.06,c.t*f*0.6);
+    v+=gauss(tau,tC, c.peakedT?0.033:0.06, c.t*f*(c.peakedT?0.95:0.6));  // hyperK: tall, narrow, tented T
   }
   return v;
 }
