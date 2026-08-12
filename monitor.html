@@ -657,6 +657,18 @@ let ROLE=params.get("role")||null;
 const TOPIC=()=>`foamfrat/simmon/${ROOM}/state`;
 const RTOPIC=()=>`foamfrat/simmon/${ROOM}/rtc`;     // WebRTC signaling channel
 const CLIENTID=Math.random().toString(16).slice(2,10);
+/* ---- anonymous usage analytics (aggregate counts only, no personal data) ---- */
+const ANALYTICS_URL="https://script.google.com/macros/s/AKfycbxlCLbhBSW4F6fKQEP_XACK60JVoky-9GBwb8SYQ_VGv0HOZ1eDgBevKUVTAwf1fJg/exec";
+const SID=Math.random().toString(36).slice(2,10);
+function track(ev,detail){
+  if(!ANALYTICS_URL) return;
+  try{
+    const payload=JSON.stringify({ev,detail:(detail==null?"":detail),role:ROLE||"",room:ROOM||"",sid:SID,ua:navigator.userAgent});
+    const blob=new Blob([payload],{type:"text/plain;charset=UTF-8"});
+    if(navigator.sendBeacon){ navigator.sendBeacon(ANALYTICS_URL,blob); }
+    else{ fetch(ANALYTICS_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:payload,keepalive:true}); }
+  }catch(e){}
+}
 // Connect through several public brokers at once — devices sync as long as they
 // share ANY one reachable broker (fixes "connecting forever" on restrictive/intl networks).
 const BROKERS=[
@@ -1164,7 +1176,7 @@ function runMonitor(){
   mCamBtn.onclick=()=>{ monCamStream? monStopCam() : monStartCam(); };
 
   // 12-lead snapshot (acquire from the monitor, or remotely from Control)
-  document.getElementById("m12Lead").onclick=renderTwelveLead;
+  document.getElementById("m12Lead").onclick=()=>{ renderTwelveLead(); track("twelve_lead", STATE.stemiSite||"normal"); };
   document.getElementById("tvClose").onclick=()=>document.getElementById("twelve").classList.remove("show");
 
   // fullscreen toggle (works on desktop & iPad Safari that support the Fullscreen API)
@@ -1211,6 +1223,7 @@ function runMonitor(){
   }
   function monShock(){     // deliver energy: artifact + rhythm conversion (synced via shockSeq)
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
+    track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       STATE.rhythm="sinus"; STATE.hr=90; STATE.pea=false;
@@ -1579,7 +1592,7 @@ function runControl(){
       if(RHYTHMS[k].hr) {STATE.hr=RHYTHMS[k].hr; syncSliders();}
       STATE.pea=(k==="pea"); document.getElementById("swPea").classList.toggle("on",STATE.pea);
       [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===k));
-      push("rhythm "+RHYTHMS[k].label);
+      push("rhythm "+RHYTHMS[k].label); track("rhythm", RHYTHMS[k].label);
     };
     rb.appendChild(b);
   });
@@ -1663,6 +1676,7 @@ function runControl(){
   document.getElementById("swAutoConv").onclick=e=>{STATE.autoConvert=!STATE.autoConvert;e.target.classList.toggle("on",STATE.autoConvert);push(null);};
   document.getElementById("btnShock").onclick=()=>{
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
+    track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
     let lab=(STATE.sync?"Cardiovert ":"Shock ")+STATE.shockEnergy+"J";
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
@@ -1754,7 +1768,7 @@ function runControl(){
   const siteSel=document.getElementById("stemiSite");
   siteSel.value=STATE.stemiSite||"anterior";
   siteSel.onchange=e=>{ STATE.stemiSite=e.target.value; push("STEMI site "+STATE.stemiSite); };
-  document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); };
+  document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); track("twelve_lead", STATE.stemiSite||"normal"); };
 
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
@@ -1889,7 +1903,7 @@ function runControl(){
     dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true; lastSnap=performance.now();
     seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
     seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
-    dEvent("Scenario start — "+rl(STATE.rhythm)); vitalsSnapshot();
+    dEvent("Scenario start — "+rl(STATE.rhythm)); vitalsSnapshot(); track("scenario_start", rl(STATE.rhythm));
     if(!dbgTimer) dbgTimer=setInterval(dbgTick,1000);
   };
   document.getElementById("btnScenStop").onclick=()=>{
@@ -1950,6 +1964,7 @@ function runControl(){
 function start(role){
   ROLE=role; localStorage.setItem("ffroom",ROOM);
   connect();
+  track("open", role);
   if(role==="monitor") runMonitor();
   else if(role==="camera") runCamera();
   else runControl();
