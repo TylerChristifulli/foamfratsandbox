@@ -180,14 +180,18 @@
   .brandlogo{height:30px;width:auto;}
   /* masonry-style packing: boxes take their natural height and fill columns tightly
      (no stretched, half-empty boxes) */
-  .cwrap{flex:1;overflow:auto;padding:16px;column-width:300px;column-gap:16px;}
-  .box{background:#121212;border:1px solid #242424;border-radius:14px;padding:16px;
-    break-inside:avoid;-webkit-column-break-inside:avoid;margin:0 0 16px;display:inline-block;width:100%;box-sizing:border-box;vertical-align:top;}
-  .box h3{margin:0 0 12px;font-size:14px;color:#cfcfcf;letter-spacing:.5px;text-transform:uppercase;}
-  .field{margin-bottom:14px;}
-  .field label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:6px;}
+  .cwrap{flex:1;overflow:auto;padding:9px;column-width:248px;column-gap:9px;}
+  .box{background:#121212;border:1px solid #242424;border-radius:12px;padding:9px 11px;
+    break-inside:avoid;-webkit-column-break-inside:avoid;margin:0 0 9px;display:inline-block;width:100%;box-sizing:border-box;vertical-align:top;}
+  .box h3{margin:0 0 7px;font-size:12px;color:#cfcfcf;letter-spacing:.5px;text-transform:uppercase;}
+  .field{margin-bottom:6px;}
+  .field label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin-bottom:2px;}
   .field label b{color:#fff;font-variant-numeric:tabular-nums;}
-  input[type=range]{width:100%;accent-color:var(--ecg);height:26px;}
+  input[type=range]{width:100%;accent-color:var(--ecg);height:15px;}
+  /* compact helper text + CPR toggle emphasis */
+  .note{font-size:10.5px;color:var(--dim);margin-top:5px;line-height:1.3;}
+  .cprtoggle{background:#2a1414;border:1px solid #5a2020;border-radius:9px;padding:8px 10px;}
+  .cprtoggle span{color:#ffd2d2;font-size:12px;}
   .rhythms{display:flex;flex-wrap:wrap;gap:6px;}
   .rhythms button{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;
     padding:7px 10px;font-size:12.5px;}
@@ -466,6 +470,7 @@
 
     <div class="box">
       <h3>Rhythm</h3>
+      <div class="toggle cprtoggle" style="margin-bottom:10px"><div class="switch" id="swCpr"></div><span><b>CPR</b> — compressions in progress (overlay on ECG)</span></div>
       <div class="rhythms" id="rhythmBtns"></div>
     </div>
 
@@ -531,9 +536,6 @@
       <div style="margin-top:10px" class="toggle">
         <div class="switch on" id="swEtco2"></div><span>Show EtCO₂ on monitor</span>
       </div>
-      <div style="margin-top:10px" class="toggle">
-        <div class="switch" id="swCpr"></div><span>CPR — compressions in progress (overlay artifact on ECG)</span>
-      </div>
     </div>
 
     <div class="box">
@@ -566,7 +568,7 @@
 
     <div class="box">
       <h3>Physiology &amp; Debrief</h3>
-      <div class="toggle" style="margin-bottom:10px"><div class="switch" id="swAutoPhys"></div><span>Auto physiology (react to therapy)</span></div>
+      <div class="toggle" style="margin-bottom:10px"><div class="switch on" id="swAutoPhys"></div><span>Auto physiology (react to therapy)</span></div>
       <div style="font-size:11px;color:var(--dim);margin:-4px 0 12px">When on: pulseless rhythms deteriorate (SpO₂, EtCO₂, BP fall); a successful shock or pacing capture drives recovery.</div>
       <div class="scn">
         <button class="play" id="btnScenStart">▶ Start scenario</button>
@@ -642,8 +644,8 @@ const STATE = {
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
   stemiSite:"anterior", ecg12Seq:0,
-  // closed-loop physiology (instructor authority = control)
-  autoPhys:false,
+  // closed-loop physiology (instructor authority = control) — on by default
+  autoPhys:true,
   // display options
   tempC:false, etco2On:true,
   // chest compressions in progress (overlays compression artifact on the ECG)
@@ -827,7 +829,7 @@ class EcgEngine{
   // rate that rides ON TOP of whatever the underlying rhythm is. Pause compressions
   // (toggle off) and the true rhythm shows through again.
   cprArtifact(){
-    const rate=105;                          // compressions/min (target 100–120)
+    const rate=110;                          // compressions/min (target 100–120)
     const per=60/Math.max(rate,1);
     const ph=(this.t%per)/per;               // 0..1 within one compression
     // asymmetric thump: brisk compression stroke, rounded recoil
