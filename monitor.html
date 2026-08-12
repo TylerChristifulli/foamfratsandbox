@@ -531,6 +531,9 @@
       <div style="margin-top:10px" class="toggle">
         <div class="switch on" id="swEtco2"></div><span>Show EtCO₂ on monitor</span>
       </div>
+      <div style="margin-top:10px" class="toggle">
+        <div class="switch" id="swCpr"></div><span>CPR — compressions in progress (overlay artifact on ECG)</span>
+      </div>
     </div>
 
     <div class="box">
@@ -642,7 +645,9 @@ const STATE = {
   // closed-loop physiology (instructor authority = control)
   autoPhys:false,
   // display options
-  tempC:false, etco2On:true
+  tempC:false, etco2On:true,
+  // chest compressions in progress (overlays compression artifact on the ECG)
+  cpr:false
 };
 
 /* ---------- room + role ---------- */
@@ -818,7 +823,26 @@ class EcgEngine{
     this.pPhase+=dt; this.pacerPhase+=dt;
     if(this.beatT>=this.beatLen) this.scheduleNext(false);
   }
+  // chest-compression artifact: a large, fairly regular deflection at compression
+  // rate that rides ON TOP of whatever the underlying rhythm is. Pause compressions
+  // (toggle off) and the true rhythm shows through again.
+  cprArtifact(){
+    const rate=105;                          // compressions/min (target 100–120)
+    const per=60/Math.max(rate,1);
+    const ph=(this.t%per)/per;               // 0..1 within one compression
+    // asymmetric thump: brisk compression stroke, rounded recoil
+    let w = Math.sin(2*Math.PI*ph-0.5)*0.85 + Math.sin(4*Math.PI*ph)*0.14;
+    w *= 0.9 + 0.12*Math.sin(this.t*0.9);    // gentle manual variability (not mechanical)
+    w += (Math.random()-0.5)*0.05;           // fine motion noise
+    return w;
+  }
   value(){
+    let v=this.rawValue();
+    // overlay compressions on any rhythm, but not during the defib discharge artifact
+    if(STATE.cpr && this.artUntil<=this.t) v += this.cprArtifact();
+    return v;
+  }
+  rawValue(){
     // defibrillation artifact: full-scale deflection then a brief flat pause
     if(this.artUntil>this.t){
       const elapsed=1.1-(this.artUntil-this.t);
@@ -1629,6 +1653,7 @@ function runControl(){
     document.getElementById("btnTempUnit").textContent=STATE.tempC?"°F":"°C"; }
   document.getElementById("btnTempUnit").onclick=()=>{ STATE.tempC=!STATE.tempC; updTempUnitUI(); syncSliders(); push(null); };
   document.getElementById("swEtco2").onclick=e=>{ STATE.etco2On=!STATE.etco2On; e.currentTarget.classList.toggle("on",STATE.etco2On); push("EtCO₂ "+(STATE.etco2On?"shown":"hidden")); };
+  document.getElementById("swCpr").onclick=e=>{ STATE.cpr=!STATE.cpr; e.currentTarget.classList.toggle("on",STATE.cpr); push("CPR "+(STATE.cpr?"started":"stopped")); };
   updTempUnitUI();
 
   // quick events
@@ -1647,6 +1672,7 @@ function runControl(){
   function setMany(o){Object.assign(STATE,o);
     [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===STATE.rhythm));
     {const e=document.getElementById("swEtco2"); if(e) e.classList.toggle("on",STATE.etco2On!==false); updTempUnitUI();}
+    {const c=document.getElementById("swCpr"); if(c) c.classList.toggle("on",!!STATE.cpr);}
     document.getElementById("swPulse").classList.toggle("on",STATE.pulse);
     document.getElementById("swPea").classList.toggle("on",STATE.pea);
     document.getElementById("swAline").classList.toggle("on",STATE.aline);
