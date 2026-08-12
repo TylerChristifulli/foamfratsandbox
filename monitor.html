@@ -204,7 +204,7 @@
   .scn button.play{background:#0c2a12;border-color:#194d24;color:#b6f5c4;}
   .log{font-size:12px;color:var(--dim);max-height:120px;overflow:auto;margin-top:8px;font-variant-numeric:tabular-nums;}
   .toggle{display:flex;gap:8px;align-items:center;font-size:13px;color:#ccc;}
-  .switch{position:relative;width:44px;height:24px;background:#333;border-radius:12px;transition:.2s;}
+  .switch{position:relative;width:44px;height:24px;background:#333;border-radius:12px;transition:.2s;flex:none;}
   .switch.on{background:var(--ecg);}
   .switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.2s;}
   .switch.on::after{left:22px;}
@@ -470,7 +470,7 @@
 
     <div class="box">
       <h3>Rhythm</h3>
-      <div class="toggle cprtoggle" style="margin-bottom:10px"><div class="switch" id="swCpr"></div><span><b>CPR</b> — compressions in progress (overlay on ECG)</span></div>
+      <div class="toggle cprtoggle" style="margin-bottom:10px"><div class="switch" id="swCpr"></div><span><b>CPR</b> — compressions in progress</span></div>
       <div class="rhythms" id="rhythmBtns"></div>
     </div>
 
