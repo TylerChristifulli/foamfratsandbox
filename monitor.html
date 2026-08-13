@@ -1792,7 +1792,7 @@ function runControl(){
     if(!wrap||!ifr) return;
     const DW=1180, DH=740;                                    // design size of the "screen"
     ifr.style.width=DW+"px"; ifr.style.height=DH+"px"; ifr.style.transformOrigin="top left";
-    ifr.src="monitor.html?role=monitor&room="+encodeURIComponent(ROOM)+"&preview=1";
+    ifr.src="monitor.html?role=monitor&room="+encodeURIComponent(ROOM)+"&preview=1&_="+Date.now();
     // seed the preview with current state as soon as it loads, then keep it synced via broadcast()
     ifr.addEventListener("load",()=>{ let n=0; const seed=setInterval(()=>{ try{ ifr.contentWindow.postMessage({__ffstate:JSON.stringify(STATE)},location.origin); }catch(e){} if(++n>=5) clearInterval(seed); },300); });
     function fit(){ const w=wrap.clientWidth||1, s=w/DW;      // scale to the box's current width
