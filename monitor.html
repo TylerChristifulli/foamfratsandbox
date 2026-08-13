@@ -194,6 +194,17 @@
   .note{font-size:10.5px;color:var(--dim);margin-top:5px;line-height:1.3;}
   .cprtoggle{background:#2a1414;border:1px solid #5a2020;border-radius:9px;padding:8px 10px;}
   .cprtoggle span{color:#ffd2d2;font-size:12px;}
+  /* live monitor preview (mirrors the student's screen) — full-width band on top */
+  #previewBox{column-span:all;-webkit-column-span:all;background:#000;border-color:#1e1e1e;}
+  .pvsub{color:var(--dim);font-weight:400;text-transform:none;font-size:10px;letter-spacing:0;}
+  .pvwrap{display:flex;gap:12px;align-items:stretch;}
+  .pvcanvas{flex:1;height:118px;background:#000;border:1px solid #1e1e1e;border-radius:8px;display:block;min-width:0;}
+  .pvnums{display:flex;flex-direction:column;justify-content:space-between;min-width:88px;}
+  .pvn{display:flex;flex-direction:column;line-height:1;}
+  .pvn .k{font-size:10px;letter-spacing:.5px;color:var(--dim);}
+  .pvn b{font-size:22px;font-variant-numeric:tabular-nums;}
+  .pvn.hr b{color:var(--ecg);} .pvn.spo2 b{color:var(--pleth);}
+  .pvn.co2 b{color:var(--co2);} .pvn.bp b{color:var(--nibp);}
   .rhythms{display:flex;flex-wrap:wrap;gap:6px;}
   .rhythms button{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;
     padding:7px 10px;font-size:12.5px;}
@@ -463,6 +474,19 @@
     <span class="connpill" id="cConn" style="margin-left:0">connecting…</span>
   </div>
   <div class="cwrap">
+    <div class="box" id="previewBox">
+      <h3>Monitor Preview <span class="pvsub">— live mirror of the student's screen</span></h3>
+      <div class="pvwrap">
+        <canvas id="pvEcg" class="pvcanvas"></canvas>
+        <div class="pvnums">
+          <div class="pvn hr"><span class="k">HR</span><b id="pvHr">--</b></div>
+          <div class="pvn spo2"><span class="k">SpO₂ %</span><b id="pvSpo2">--</b></div>
+          <div class="pvn co2"><span class="k">EtCO₂</span><b id="pvCo2">--</b></div>
+          <div class="pvn bp"><span class="k">BP mmHg</span><b id="pvBp">--/--</b></div>
+        </div>
+      </div>
+    </div>
+
     <div class="box">
       <h3>Live Camera</h3>
       <video id="camFeed" class="camfeed" autoplay playsinline muted></video>
@@ -1750,6 +1774,42 @@ function runControl(){
    Object.keys(RHYTHMS).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=RHYTHMS[k].label;cs.appendChild(o);});
    cs.value=STATE.convertTo||"sinus";
    cs.onchange=e=>{STATE.convertTo=e.target.value; push("Shock converts to "+RHYTHMS[STATE.convertTo].label);};}
+
+  /* ---- live monitor preview: a control-side mirror of the student's ECG + numbers ---- */
+  (function(){
+    const cv=document.getElementById("pvEcg"); if(!cv) return;
+    const ctx=cv.getContext("2d"); let W,H,x=0,prevY=null;
+    function resize(){const r=cv.getBoundingClientRect();
+      cv.width=Math.max(1,r.width*devicePixelRatio); cv.height=Math.max(1,r.height*devicePixelRatio);
+      W=cv.width;H=cv.height; ctx.lineWidth=1.7*devicePixelRatio; ctx.lineCap="round"; ctx.lineJoin="round";
+      ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null;}
+    new ResizeObserver(resize).observe(cv); resize();
+    const eng=new EcgEngine();
+    const DT=1/200; let last=performance.now(), acc=0;
+    const num=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+    function frame(now){
+      const pps=200*devicePixelRatio;
+      let dt=Math.min((now-last)/1000,0.1); last=now; acc+=dt;
+      while(acc>=DT){
+        eng.step(DT);
+        const nx=x+pps*DT;
+        ctx.fillStyle="#000"; ctx.fillRect(nx,0,6*devicePixelRatio,H);
+        const yy=H*0.5 - eng.value()*0.24*H;
+        if(prevY!==null){ ctx.strokeStyle=getCss("--ecg"); ctx.beginPath(); ctx.moveTo(x,prevY); ctx.lineTo(nx,yy); ctx.stroke(); }
+        prevY=yy; x=nx; if(x>=W){ x=0; prevY=null; }
+        acc-=DT;
+      }
+      // numbers mirror what the monitor shows
+      const cap = STATE.pacerOn && STATE.pacerMa>=STATE.captureMa && STATE.rhythm!=="vfib";
+      const noP = !cap && (STATE.pea||STATE.rhythm==="vfib"||STATE.rhythm==="asystole");
+      num("pvHr", STATE.rhythm==="asystole"?"0":(STATE.rhythm==="vfib"?"--":(cap?STATE.pacerRate:STATE.hr)));
+      num("pvSpo2", noP?"--":STATE.spo2);
+      num("pvCo2", STATE.etco2On===false?"off":STATE.etco2);
+      num("pvBp", STATE.sys>0?(STATE.sys+"/"+STATE.dia):"--/--");
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
   document.getElementById("btnShock").onclick=()=>{
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
