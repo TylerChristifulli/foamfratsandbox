@@ -128,6 +128,8 @@
   .nibpbar i{display:block;height:100%;width:0;background:var(--nibp);}
   .nibpcycle{margin-top:8px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
     border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;align-self:flex-start;}
+  .nibpauto{margin-top:6px;background:#13243a;border:1px solid #25496e;color:#bfe2ff;
+    border-radius:6px;padding:5px 6px;font-size:12px;align-self:flex-start;}
   .alarmbanner{position:absolute;top:0;left:0;right:0;text-align:center;background:var(--alarm);
     color:#fff;font-weight:700;font-size:13px;padding:2px;display:none;z-index:6;}
 
@@ -408,7 +410,16 @@
       <div class="num nibp" id="nNibp"><div class="lab">NIBP<span class="u">mmHg</span></div>
         <div class="val">--/--</div><div class="sub">(<span id="nMap">--</span>)</div>
         <div class="nibpbar" id="nibpBar"><i></i></div>
-        <button class="nibpcycle" id="btnNibpMon">↻ Cycle BP</button></div>
+        <button class="nibpcycle" id="btnNibpMon">↻ Cycle BP</button>
+        <select class="nibpauto" id="nibpAutoMon" title="Auto-cycle NIBP">
+          <option value="0">Auto: off</option>
+          <option value="1">Every 1 min</option>
+          <option value="2">Every 2 min</option>
+          <option value="3">Every 3 min</option>
+          <option value="5">Every 5 min</option>
+          <option value="10">Every 10 min</option>
+          <option value="15">Every 15 min</option>
+        </select></div>
       <div class="num etco2" id="nEtco2"><div class="lab">EtCO₂<span class="u">mmHg</span></div>
         <div class="val">--</div><div class="sub">BR <b id="nRr">--</b></div></div>
       <div class="num spo2" id="nSpo2"><div class="lab">SpO₂<span class="u">%</span></div><div class="val">--</div></div>
@@ -547,6 +558,8 @@
         <div class="toggle"><div class="switch" id="swSync"></div><span>SYNC (cardiovert)</span></div>
       </div>
       <div class="toggle"><div class="switch on" id="swAutoConv"></div><span>Shock converts VF / VT</span></div>
+      <div class="field" style="margin-top:10px"><label>Shock converts to</label>
+        <select id="convertTo" class="sel" style="width:100%"></select></div>
       <hr style="border:none;border-top:1px solid #242424;margin:14px 0">
       <div class="toggle" style="margin-bottom:12px"><div class="switch" id="swPacer"></div><span>Transcutaneous pacer</span></div>
       <div class="field"><label>Pacer rate <b id="lPrate">70</b> ppm</label><input type="range" id="sPrate" min="30" max="120" value="70"></div>
@@ -639,7 +652,7 @@ const STATE = {
   sys:120, dia:80, temp:98.6, pulse:false, pea:false, aline:false, perfusion:100,
   patient:"Adult",
   // defibrillation / cardioversion
-  shockEnergy:200, sync:false, autoConvert:true, shockSeq:0, lastShockEnergy:0, lastShockRhythm:"",
+  shockEnergy:200, sync:false, autoConvert:true, convertTo:"sinus", shockSeq:0, lastShockEnergy:0, lastShockRhythm:"",
   // transcutaneous pacing
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
@@ -780,7 +793,7 @@ const RHYTHMS={
 
 class EcgEngine{
   constructor(){this.t=0;this.beatT=0;this.beatLen=.75;this.beat=null;this.pPhase=0;
-    this.pacerPhase=0;this.artUntil=0;
+    this.pacerPhase=0;this.artUntil=0;this._fired=false;
     this.wenck=0;this.mobCount=0;this.scheduleNext(true);}
   cfg(){return RHYTHMS[STATE.rhythm]||RHYTHMS.sinus;}
   cap(){ // electrical capture from transcutaneous pacing
@@ -797,7 +810,7 @@ class EcgEngine{
   scheduleNext(first){
     // electrical capture from pacing overrides intrinsic rhythm
     if(this.cap()){
-      this.beat={pacedCapture:true}; this.beatLen=60/Math.max(STATE.pacerRate,1); this.beatT=0; return;
+      this.beat={pacedCapture:true, rTime:0.07}; this.beatLen=60/Math.max(STATE.pacerRate,1); this.beatT=0; return;
     }
     const c=this.cfg();
     let hr=STATE.hr>0?STATE.hr:c.hr; if(hr<=0)hr=c.hr||60;
@@ -816,8 +829,16 @@ class EcgEngine{
       if(this.wenck>=4){ dropped=true; this.wenck=0; }
     }
     if(c.mobitz2){ this.mobCount++; if(this.mobCount%3===0) dropped=true; }  // constant PR, sudden drop
-    this.beat={type,dropped,pr,c};
     this.beatLen=rr; this.beatT=0;
+    // time within the beat where the R wave (tall QRS) actually falls — used to place
+    // the QRS beep and the sync-cardioversion marker ON the R wave, not the beat edge
+    let rTime;
+    if(dropped) rTime=null;                                   // no conducted QRS this beat
+    else if(c.vtmorph) rTime=0.22*rr;                         // VT R-hump phase
+    else if(type==="pvc") rTime=0.10;                         // wide PVC peak
+    else if(c.rbbb||c.lbbb) rTime=(pr==null?0.16:pr)+0.06;    // BBB terminal R
+    else rTime=(pr==null?0.16:pr)+0.025;                      // normal R peak
+    this.beat={type,dropped,pr,c,rTime};
   }
   step(dt){
     this.t+=dt; this.beatT+=dt;
@@ -879,10 +900,11 @@ class EcgEngine{
       v+=gauss(tau,0.34,0.08,0.45);
       return v;
     }
-    // independent P waves marching for complete heart block
+    // independent P waves marching for complete heart block — identical shape/size
+    // every cycle (matches the 12-lead P); they march through the QRS/T (true 3° block)
     if(c.chb){
       const pRate=75, pp=60/pRate, pp_t=(this.pPhase%pp);
-      v+=gauss(pp_t,0.05,0.022,0.18);
+      v+=gauss(pp_t,0.05,0.022,(c.p||0.15));
     }
     if(b.dropped){ // P wave but no conducted QRS
       if(c.p) v+=gauss(tau,0.05,0.022,c.p);
@@ -1054,14 +1076,20 @@ function runMonitor(){
     acc+=dt;
     while(acc>=SIM_DT){
       ecg.step(SIM_DT); plethPhase+=SIM_DT; co2Phase+=SIM_DT; artPhase+=SIM_DT;
-      // beat boundary: QRS beep (pitch tracks SpO2) + sync cardioversion markers
+      // QRS beep (pitch tracks SpO2) + sync-cardioversion marker, fired exactly when
+      // the sweep reaches the R wave so the sync flags sit ON each QRS
       const bp=ecg.beatT/ecg.beatLen;
-      if(bp<lastBeatPhase && active.ecg){
-        if(!noPulse() && STATE.rhythm!=="vfib"){
-          const f=600+(STATE.spo2-90)*8;
-          tone(Math.max(400,f),0.07,0.18);
+      if(bp<lastBeatPhase) ecg._fired=false;              // new beat → re-arm
+      if(active.ecg && !ecg._fired && ecg.beat){
+        const rt=ecg.beat.rTime;
+        if(rt!=null && ecg.beatT>=rt){
+          ecg._fired=true;
+          if(!noPulse() && STATE.rhythm!=="vfib"){
+            const f=600+(STATE.spo2-90)*8;
+            tone(Math.max(400,f),0.07,0.18);
+          }
+          if(STATE.sync && STATE.rhythm!=="vfib" && STATE.rhythm!=="asystole") waveEcg.mark(getCss("--co2"));
         }
-        if(STATE.sync && STATE.rhythm!=="vfib" && STATE.rhythm!=="asystole") waveEcg.mark(getCss("--co2"));
       }
       lastBeatPhase=bp;
       waves.forEach(w=>w.tick(SIM_DT));
@@ -1172,6 +1200,19 @@ function runMonitor(){
   function alarm(id,on){document.getElementById(id).classList.toggle("alarm",!!on);}
   // monitor-side manual NIBP cycle button (tap on the iPad)
   document.getElementById("btnNibpMon").onclick=()=>cycleNibp();
+  // monitor-side auto-cycle: pick an interval and the cuff re-reads on its own
+  let nibpAutoTimer=null;
+  document.getElementById("nibpAutoMon").onchange=e=>{
+    const min=parseInt(e.target.value)||0;
+    if(nibpAutoTimer){ clearInterval(nibpAutoTimer); nibpAutoTimer=null; }
+    if(min>0){
+      cycleNibp();                                    // take one reading now
+      nibpAutoTimer=setInterval(()=>cycleNibp(), min*60000);
+      flashMsg("NIBP auto-cycling every "+min+" min",1800,"#7fd1ff");
+    } else {
+      flashMsg("NIBP auto-cycle off",1400,"#7fd1ff");
+    }
+  };
 
   // tap a waveform to connect/activate that channel (like attaching the lead)
   document.querySelectorAll(".tapover").forEach(ov=>{
@@ -1252,9 +1293,10 @@ function runMonitor(){
     track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
-      STATE.rhythm="sinus"; STATE.hr=90; STATE.pea=false;
-      if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;}
-      if(STATE.spo2<88) STATE.spo2=94;
+      const tgt=STATE.convertTo||"sinus", tc=RHYTHMS[tgt]||RHYTHMS.sinus;
+      const dead=(tgt==="asystole"||tgt==="vfib"||tgt==="pea");
+      STATE.rhythm=tgt; STATE.hr=(tc.hr||90); STATE.pea=(tgt==="pea");
+      if(!dead){ if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;} if(STATE.spo2<88) STATE.spo2=94; }
     }
     ecg.triggerShock(); flashShock(STATE.lastShockEnergy); lastShockSeq=STATE.shockSeq;
     devApply();
@@ -1685,6 +1727,7 @@ function runControl(){
     document.getElementById("lEnergy").textContent=STATE.shockEnergy;
     [...document.getElementById("energyBtns").children].forEach(c=>c.classList.toggle("active",+c.dataset.j===STATE.shockEnergy));
     const ss=document.getElementById("stemiSite"); if(ss&&STATE.stemiSite) ss.value=STATE.stemiSite;
+    {const cs=document.getElementById("convertTo"); if(cs&&STATE.convertTo) cs.value=STATE.convertTo;}
     syncSliders();}
 
   // toggles
@@ -1702,16 +1745,22 @@ function runControl(){
     eb.appendChild(b);});
   document.getElementById("swSync").onclick=e=>{STATE.sync=!STATE.sync;e.target.classList.toggle("on",STATE.sync);push("SYNC "+(STATE.sync?"on":"off"));};
   document.getElementById("swAutoConv").onclick=e=>{STATE.autoConvert=!STATE.autoConvert;e.target.classList.toggle("on",STATE.autoConvert);push(null);};
+  // "Shock converts to ___" — pick the resulting rhythm after a successful shock
+  {const cs=document.getElementById("convertTo");
+   Object.keys(RHYTHMS).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=RHYTHMS[k].label;cs.appendChild(o);});
+   cs.value=STATE.convertTo||"sinus";
+   cs.onchange=e=>{STATE.convertTo=e.target.value; push("Shock converts to "+RHYTHMS[STATE.convertTo].label);};}
   document.getElementById("btnShock").onclick=()=>{
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
     let lab=(STATE.sync?"Cardiovert ":"Shock ")+STATE.shockEnergy+"J";
     const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
-      Object.assign(STATE,{rhythm:"sinus",hr:90,pea:false});
-      if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;}
-      if(STATE.spo2<88) STATE.spo2=94;
-      lab+=" → converted";
+      const tgt=STATE.convertTo||"sinus", tc=RHYTHMS[tgt]||RHYTHMS.sinus;
+      const dead=(tgt==="asystole"||tgt==="vfib"||tgt==="pea");
+      Object.assign(STATE,{rhythm:tgt, hr:(tc.hr||90), pea:(tgt==="pea")});
+      if(!dead){ if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;} if(STATE.spo2<88) STATE.spo2=94; }
+      lab+=" → "+tc.label;
     }
     setMany({}); push(lab);
   };
