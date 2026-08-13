@@ -565,7 +565,7 @@
         <div class="switch" id="swAline"></div><span>Arterial line (A-line) placed — show ART waveform</span>
       </div>
       <div style="margin-top:10px" class="toggle">
-        <div class="switch" id="swPea"></div><span>Pulseless (PEA) — electrical activity, no pulse</span>
+        <div class="switch" id="swPea"></div><span>PEA — pulseless (no pulse on the current rhythm)</span>
       </div>
       <div style="margin-top:10px" class="toggle">
         <div class="switch on" id="swEtco2"></div><span>Show EtCO₂ on monitor</span>
@@ -728,6 +728,8 @@ function broadcast(){
   const payload=JSON.stringify(STATE);
   mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(TOPIC(),payload,{retain:true}); }catch(e){} });
   try{ if(bc) bc.postMessage(payload); }catch(e){}
+  // push straight into the embedded Control-Room preview iframe (same-origin, always reliable)
+  try{ const pf=document.getElementById("pvIframe"); if(pf&&pf.contentWindow) pf.contentWindow.postMessage({__ffstate:payload},location.origin); }catch(e){}
 }
 function applyState(obj){ Object.assign(STATE,obj); onState.forEach(f=>f()); }
 // WebRTC signaling: small JSON messages (offer/answer/ice), sender-tagged + id'd for cross-broker dedupe
@@ -741,6 +743,8 @@ function connect(){
   // BroadcastChannel = instant same-device sync (two tabs/windows)
   try{ bc=new BroadcastChannel("foamfrat-"+ROOM);
        bc.onmessage=e=>{ try{applyState(JSON.parse(e.data));}catch(_){}}; }catch(e){}
+  // embedded preview: receive state directly from the parent Control Room window
+  try{ window.addEventListener("message",e=>{ if(e.origin===location.origin && e.data && e.data.__ffstate){ try{applyState(JSON.parse(e.data.__ffstate));}catch(_){}}}); }catch(e){}
   // MQTT over WSS across multiple brokers for resilience
   BROKERS.forEach((url,i)=>{
     let c; try{
@@ -1682,15 +1686,14 @@ function runControl(){
   document.getElementById("control").style.display="flex";
   document.getElementById("cRoom").textContent=ROOM;
 
-  // rhythm buttons
+  // rhythm buttons — PEA is a pulseless *state* (toggle) that applies to any rhythm, not its own rhythm
   const rb=document.getElementById("rhythmBtns");
-  Object.keys(RHYTHMS).forEach(k=>{
+  Object.keys(RHYTHMS).filter(k=>k!=="pea").forEach(k=>{
     const b=document.createElement("button");b.textContent=RHYTHMS[k].label;b.dataset.k=k;
     if(k===STATE.rhythm)b.classList.add("active");
     b.onclick=()=>{ STATE.rhythm=k;
       // sensible default HR for the rhythm
       if(RHYTHMS[k].hr) {STATE.hr=RHYTHMS[k].hr; syncSliders();}
-      STATE.pea=(k==="pea"); document.getElementById("swPea").classList.toggle("on",STATE.pea);
       [...rb.children].forEach(c=>c.classList.toggle("active",c.dataset.k===k));
       push("rhythm "+RHYTHMS[k].label); track("rhythm", RHYTHMS[k].label);
     };
@@ -1790,6 +1793,8 @@ function runControl(){
     const DW=1180, DH=740;                                    // design size of the "screen"
     ifr.style.width=DW+"px"; ifr.style.height=DH+"px"; ifr.style.transformOrigin="top left";
     ifr.src="monitor.html?role=monitor&room="+encodeURIComponent(ROOM)+"&preview=1";
+    // seed the preview with current state as soon as it loads, then keep it synced via broadcast()
+    ifr.addEventListener("load",()=>{ let n=0; const seed=setInterval(()=>{ try{ ifr.contentWindow.postMessage({__ffstate:JSON.stringify(STATE)},location.origin); }catch(e){} if(++n>=5) clearInterval(seed); },300); });
     function fit(){ const w=wrap.clientWidth||1, s=w/DW;      // scale to the box's current width
       ifr.style.transform="scale("+s+")"; wrap.style.height=(DH*s)+"px";
       if(window._ffGrid){ try{ window._ffGrid.refreshItems([document.getElementById("previewBox")]).layout(); }catch(e){} } }
@@ -1814,6 +1819,10 @@ function runControl(){
     const save=()=>{ try{ localStorage.setItem(KEY, JSON.stringify(grid.getItems().map(i=>i.getElement().dataset.boxid))); }catch(e){} };
     grid.on("dragReleaseEnd",save); grid.on("dragEnd",save);
     window._ffGrid=grid;
+    // keep the packing correct whenever any box changes size (preview scaling in,
+    // logs/lists growing, etc.) so a box can never end up overlapping after first layout
+    let lt; const relayout=()=>{ clearTimeout(lt); lt=setTimeout(()=>{ try{grid.refreshItems().layout();}catch(e){} },70); };
+    try{ const ro=new ResizeObserver(relayout); grid.getItems().forEach(it=>ro.observe(it.getElement())); }catch(e){}
     let rt; window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{ try{grid.refreshItems().layout();}catch(e){} },160); });
   })();
   document.getElementById("btnShock").onclick=()=>{
@@ -1969,6 +1978,11 @@ function runControl(){
       STATE.etco2=Math.max(8, ap(STATE.etco2,10,0.06));
       STATE.sys  =Math.max(0, ap(STATE.sys,0,0.4));
       STATE.dia  =Math.max(0, ap(STATE.dia,0,0.4));
+    } else if(STATE.rhythm==="vt"){         // sustained VT → hemodynamic decompensation (not full arrest)
+      STATE.spo2 =Math.max(78,ap(STATE.spo2,80,0.05));
+      STATE.etco2=Math.max(18,ap(STATE.etco2,22,0.05));
+      STATE.sys  =Math.max(52,ap(STATE.sys,58,0.09));
+      STATE.dia  =Math.max(30,ap(STATE.dia,36,0.09));
     } else if(now<recoverUntil){           // after ROSC / capture → recover
       STATE.spo2 =Math.min(98,ap(STATE.spo2,97,0.07));
       STATE.etco2=ap(STATE.etco2,37,0.07);
