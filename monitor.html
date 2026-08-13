@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>FoamFrat Sim Monitor</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/muuri/0.9.5/muuri.min.js"></script>
 <style>
   :root{
     /* ZOLL X Series-style channel colors */
@@ -194,6 +195,18 @@
   .note{font-size:10.5px;color:var(--dim);margin-top:5px;line-height:1.3;}
   .cprtoggle{background:#2a1414;border:1px solid #5a2020;border-radius:9px;padding:8px 10px;}
   .cprtoggle span{color:#ffd2d2;font-size:12px;}
+  /* draggable, gap-filling layout (Muuri). Falls back to the flex layout if the lib is unavailable. */
+  .cwrap.muuri-on{display:block;position:relative;}
+  .cwrap.muuri-on > .box{position:absolute;margin:4px;width:calc(20% - 8px);}
+  .cwrap.muuri-on > #previewBox{width:calc(40% - 8px);}
+  .cwrap.muuri-on > .box > h3{cursor:grab;}
+  .cwrap.muuri-on > .box > h3::before{content:"⠿";margin-right:7px;color:#5a5a5a;font-size:12px;}
+  .muuri-item-dragging{z-index:3;cursor:grabbing;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  .muuri-item-releasing{z-index:2;}
+  @media(max-width:1200px){.cwrap.muuri-on > .box{width:calc(25% - 8px);} .cwrap.muuri-on > #previewBox{width:calc(50% - 8px);}}
+  @media(max-width:950px){.cwrap.muuri-on > .box{width:calc(33.333% - 8px);} .cwrap.muuri-on > #previewBox{width:calc(66.666% - 8px);}}
+  @media(max-width:680px){.cwrap.muuri-on > .box{width:calc(50% - 8px);} .cwrap.muuri-on > #previewBox{width:calc(100% - 8px);}}
+  @media(max-width:470px){.cwrap.muuri-on > .box,.cwrap.muuri-on > #previewBox{width:calc(100% - 8px);}}
   /* live monitor preview — a large, shrunken copy of the student's monitor (wide box) */
   #previewBox{flex:2.6 1 440px;min-width:300px;background:#0c0c0c;border-color:#1e1e1e;}
   .pvsub{color:var(--dim);font-weight:400;text-transform:none;font-size:10px;letter-spacing:0;}
@@ -464,7 +477,8 @@
     <img class="brandlogo" src="Transparent%20White%20Crest.png" alt="" onerror="this.style.display='none'">
     <b>FOAMfrat Control Room</b>
     <span>Room <span class="room" id="cRoom"></span></span>
-    <button class="cyclebtn" id="resetAll" style="margin-left:auto">↺ Reset for new group</button>
+    <button class="cyclebtn" id="resetLayout" style="margin-left:auto">⤢ Reset layout</button>
+    <button class="cyclebtn" id="resetAll">↺ Reset for new group</button>
     <span class="connpill" id="cConn" style="margin-left:0">connecting…</span>
   </div>
   <div class="cwrap">
@@ -1777,8 +1791,30 @@ function runControl(){
     ifr.style.width=DW+"px"; ifr.style.height=DH+"px"; ifr.style.transformOrigin="top left";
     ifr.src="monitor.html?role=monitor&room="+encodeURIComponent(ROOM)+"&preview=1";
     function fit(){ const w=wrap.clientWidth||1, s=w/DW;      // scale to the box's current width
-      ifr.style.transform="scale("+s+")"; wrap.style.height=(DH*s)+"px"; }
+      ifr.style.transform="scale("+s+")"; wrap.style.height=(DH*s)+"px";
+      if(window._ffGrid){ try{ window._ffGrid.refreshItems([document.getElementById("previewBox")]).layout(); }catch(e){} } }
     new ResizeObserver(fit).observe(wrap); window.addEventListener("resize",fit); fit();
+  })();
+
+  /* ---- draggable, gap-filling control layout — arrange the boxes; saved on this device ---- */
+  (function(){
+    const cw=document.querySelector(".cwrap");
+    const rlBtn=document.getElementById("resetLayout");
+    const KEY="ff_ctrl_layout";
+    if(rlBtn) rlBtn.onclick=()=>{ try{localStorage.removeItem(KEY);}catch(e){} location.reload(); };
+    if(!cw || !window.Muuri) return;                          // library missing → keep flex fallback
+    const slug=b=>((b.id||(b.querySelector("h3")&&b.querySelector("h3").textContent)||"")+"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,28)||("b"+Math.random().toString(36).slice(2,7));
+    cw.querySelectorAll(":scope > .box").forEach(b=>{ if(!b.dataset.boxid) b.dataset.boxid=slug(b); });
+    cw.classList.add("muuri-on");
+    let grid;
+    try{ grid=new Muuri(cw,{items:".box",dragEnabled:true,dragHandle:"h3",layout:{fillGaps:true,rounding:true}}); }
+    catch(e){ cw.classList.remove("muuri-on"); return; }
+    let saved=null; try{ saved=JSON.parse(localStorage.getItem(KEY)||"null"); }catch(e){}
+    if(Array.isArray(saved)) grid.sort((a,b)=>{ const ia=saved.indexOf(a.getElement().dataset.boxid), ib=saved.indexOf(b.getElement().dataset.boxid); return (ia<0?999:ia)-(ib<0?999:ib); });
+    const save=()=>{ try{ localStorage.setItem(KEY, JSON.stringify(grid.getItems().map(i=>i.getElement().dataset.boxid))); }catch(e){} };
+    grid.on("dragReleaseEnd",save); grid.on("dragEnd",save);
+    window._ffGrid=grid;
+    let rt; window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{ try{grid.refreshItems().layout();}catch(e){} },160); });
   })();
   document.getElementById("btnShock").onclick=()=>{
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
