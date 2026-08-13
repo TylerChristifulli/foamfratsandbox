@@ -1254,7 +1254,8 @@ function runMonitor(){
   // preview mode: all channels are already "connected" so the shrunken screen is live
   if(PREVIEW){
     document.querySelectorAll(".tapover").forEach(ov=>{ active[ov.dataset.ch]=true; ov.classList.add("hidden"); });
-    updNums();
+    // NB: don't call updNums() here — renderDev()'s `charging` isn't initialized yet (TDZ);
+    // the normal onState hook below refreshes the numbers once setup completes.
   }
 
   // live camera streamed from THIS monitor device; Control can flip it remotely
