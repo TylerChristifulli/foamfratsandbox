@@ -1974,9 +1974,9 @@ function runControl(){
     if(!STATE.autoPhys) return;
     const now=performance.now();
     const ap=(c,t,k)=>Math.round(c+(t-c)*k);
-    if(pulseless()){                       // untreated arrest → deteriorate
+    if(pulseless()){                       // arrest → EtCO₂ falls toward 0; chest compressions restore it to ~20
       STATE.spo2 =Math.max(25,ap(STATE.spo2,25,0.06));
-      STATE.etco2=Math.max(8, ap(STATE.etco2,10,0.06));
+      STATE.etco2= STATE.cpr ? ap(STATE.etco2,20,0.12) : Math.max(0,ap(STATE.etco2,0,0.15));
       STATE.sys  =Math.max(0, ap(STATE.sys,0,0.4));
       STATE.dia  =Math.max(0, ap(STATE.dia,0,0.4));
     } else if(STATE.rhythm==="vt"){         // sustained VT → hemodynamic decompensation (not full arrest)
