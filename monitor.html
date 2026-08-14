@@ -338,15 +338,27 @@
     </div>
   </div>
   <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
-  <button class="verchip" id="verChip">v1.2 · What's new</button>
+  <button class="verchip" id="verChip">v1.3 · What's new</button>
 </div>
 
 <!-- ============ RELEASE NOTES MODAL ============ -->
 <div id="relnotes" class="relmodal">
   <div class="relcard">
-    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.2 · Aug 2026</span><button class="x" id="relClose">✕ Close</button></div>
+    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.3 · Aug 2026</span><button class="x" id="relClose">✕ Close</button></div>
     <div class="relbody">
       <p class="kick">A rolling summary of everything added and improved since launch.</p>
+
+      <h4>New in v1.3</h4>
+      <ul>
+        <li><b>Live Monitor Preview in the Control Room</b> — a shrunken, real-time mirror of exactly what the student sees on the monitor.</li>
+        <li><b>CPR compressions toggle</b> — overlays realistic chest-compression artifact on the ECG (~110/min). It also drives capnography: <b>EtCO₂ falls toward 0 in arrest and rises to ~20 with good compressions</b>, dropping again if compressions stop.</li>
+        <li><b>PEA is now a pulseless toggle</b> that applies to any rhythm — the patient keeps its underlying rhythm but has no pulse, and decompensates like an arrest.</li>
+        <li><b>V-Tach now decompensates</b> under auto-physiology — BP, SpO₂, and EtCO₂ fall over time.</li>
+        <li><b>Sync/cardioversion markers land on each R wave</b>, so the flags line up with the rhythm you convert into.</li>
+        <li><b>"Shock converts to ___"</b> — choose the rhythm the patient ends up in after a successful shock.</li>
+        <li><b>Monitor-side NIBP auto-cycle</b> — set the cuff to re-read on its own at a chosen interval.</li>
+        <li><b>Rearrangeable control panel</b> — drag any box by its title to lay out the Control Room your way; it packs tightly and remembers your arrangement.</li>
+      </ul>
 
       <h4>Connectivity &amp; reliability</h4>
       <ul>
@@ -679,7 +691,7 @@ const STATE = {
   // transcutaneous pacing
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
-  stemiSite:"anterior", ecg12Seq:0,
+  stemiSite:"none", ecg12Seq:0, blankSeq:0,
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
@@ -1132,7 +1144,7 @@ function runMonitor(){
 
   // numbers + alarms
   let nibpShown=null, nibpCycling=false, eventsPrimed=false;
-  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0, lastTwelveSeq=STATE.ecg12Seq||0;
+  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0, lastTwelveSeq=STATE.ecg12Seq||0, lastBlankSeq=STATE.blankSeq||0;
   // don't fire shock/NIBP events from the retained state we receive on load;
   // re-baseline for ~2s while the initial sync settles, then arm real events.
   setTimeout(()=>{ eventsPrimed=true; }, 2000);
@@ -1179,11 +1191,12 @@ function runMonitor(){
   function updNums(){
     // events that arrive via state sync (suppressed until initial sync settles)
     if(!eventsPrimed){
-      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0; lastTwelveSeq=STATE.ecg12Seq||0;
+      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0; lastTwelveSeq=STATE.ecg12Seq||0; lastBlankSeq=STATE.blankSeq||0;
     } else {
       if((STATE.nibpSeq||0)>lastNibpSeq){ lastNibpSeq=STATE.nibpSeq; cycleNibp(); }
       if((STATE.shockSeq||0)>lastShockSeq){ lastShockSeq=STATE.shockSeq; ecg.triggerShock(); flashShock(STATE.lastShockEnergy); }
       if((STATE.ecg12Seq||0)>lastTwelveSeq){ lastTwelveSeq=STATE.ecg12Seq; renderTwelveLead(); }
+      if((STATE.blankSeq||0)>lastBlankSeq){ lastBlankSeq=STATE.blankSeq; blankMonitor(); }
     }
 
     let hrShow;
@@ -1245,18 +1258,24 @@ function runMonitor(){
     }
   };
 
-  // tap a waveform to connect/activate that channel (like attaching the lead)
+  // connect/disconnect a channel
+  function setChannel(ch,on){ active[ch]=on; const ov=document.querySelector('.tapover[data-ch="'+ch+'"]'); if(ov) ov.classList.toggle("hidden",on); }
+  // "Reset for new group" blanks the student monitor — all channels back to "tap to connect"
+  function blankMonitor(){ if(PREVIEW) return;   // the control-room preview always mirrors live channels
+    ["ecg","pleth","co2"].forEach(ch=>setChannel(ch,false));
+    nibpShown=null; nibpCycling=false; if(nibpAnim){clearInterval(nibpAnim);nibpAnim=null;}
+    const nb=document.getElementById("nibpBar"); if(nb) nb.style.display="none";
+    updNums(); }
+  // tap a waveform to connect it; long-press a connected channel to disconnect it
   document.querySelectorAll(".tapover").forEach(ov=>{
-    ov.onclick=()=>{ active[ov.dataset.ch]=true; ov.classList.add("hidden");
-      if(beep&&beep.state==="suspended") beep.resume();   // unlock audio on iOS
-      updNums(); };
+    const ch=ov.dataset.ch, lane=ov.parentElement;
+    ov.onclick=()=>{ setChannel(ch,true); if(beep&&beep.state==="suspended") beep.resume(); updNums(); };
+    let holdT=null;
+    lane.addEventListener("pointerdown",()=>{ if(!active[ch]) return; holdT=setTimeout(()=>{ setChannel(ch,false); updNums(); holdT=null; },650); });
+    ["pointerup","pointerleave","pointercancel"].forEach(ev=>lane.addEventListener(ev,()=>{ if(holdT){clearTimeout(holdT);holdT=null;} }));
   });
-  // preview mode: all channels are already "connected" so the shrunken screen is live
-  if(PREVIEW){
-    document.querySelectorAll(".tapover").forEach(ov=>{ active[ov.dataset.ch]=true; ov.classList.add("hidden"); });
-    // NB: don't call updNums() here — renderDev()'s `charging` isn't initialized yet (TDZ);
-    // the normal onState hook below refreshes the numbers once setup completes.
-  }
+  // preview mode: all channels already "connected" so the shrunken screen is live (no updNums — TDZ)
+  if(PREVIEW){ ["ecg","pleth","co2"].forEach(ch=>setChannel(ch,true)); }
 
   // live camera streamed from THIS monitor device; Control can flip it remotely
   const monStreamer=makeStreamer();
@@ -1928,8 +1947,10 @@ function runControl(){
     clearTrends();
     if(nibpTimer){clearInterval(nibpTimer);nibpTimer=null;} document.getElementById("nibpAuto").value="0";
     setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,perfusion:100,
-      pulse:false,pea:false,aline:false,sync:false,autoConvert:true,
+      pulse:false,pea:false,aline:false,sync:false,autoConvert:true,convertTo:"sinus",
+      cpr:false,tempC:false,etco2On:true,stemiSite:"none",
       pacerOn:false,pacerRate:70,pacerMa:0,captureMa:60,shockEnergy:200});
+    STATE.blankSeq=(STATE.blankSeq||0)+1;      // tell the student monitor to disconnect all monitoring
     push("reset for new group");
   };
 
