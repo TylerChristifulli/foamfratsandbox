@@ -1830,6 +1830,7 @@ function runControl(){
     if(!cw || !window.Muuri) return;                          // library missing → keep flex fallback
     const slug=b=>((b.id||(b.querySelector("h3")&&b.querySelector("h3").textContent)||"")+"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,28)||("b"+Math.random().toString(36).slice(2,7));
     cw.querySelectorAll(":scope > .box").forEach(b=>{ if(!b.dataset.boxid) b.dataset.boxid=slug(b); });
+    const defaultOrder=[...cw.querySelectorAll(":scope > .box")].map(b=>b.dataset.boxid);
     cw.classList.add("muuri-on");
     let grid;
     try{ grid=new Muuri(cw,{items:".box",dragEnabled:true,dragHandle:"h3",layout:{fillGaps:true,rounding:true}}); }
@@ -1839,6 +1840,10 @@ function runControl(){
     const save=()=>{ try{ localStorage.setItem(KEY, JSON.stringify(grid.getItems().map(i=>i.getElement().dataset.boxid))); }catch(e){} };
     grid.on("dragReleaseEnd",save); grid.on("dragEnd",save);
     window._ffGrid=grid;
+    // Reset layout: restore the default arrangement IN PLACE — no page reload, so it never kicks you out
+    if(rlBtn) rlBtn.onclick=()=>{ try{localStorage.removeItem(KEY);}catch(e){}
+      grid.sort((a,b)=>defaultOrder.indexOf(a.getElement().dataset.boxid)-defaultOrder.indexOf(b.getElement().dataset.boxid));
+      try{ grid.refreshItems().layout(); }catch(e){} };
     // keep the packing correct whenever any box changes size (preview scaling in,
     // logs/lists growing, etc.) so a box can never end up overlapping after first layout
     let lt; const relayout=()=>{ clearTimeout(lt); lt=setTimeout(()=>{ try{grid.refreshItems().layout();}catch(e){} },70); };
