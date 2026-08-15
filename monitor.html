@@ -483,6 +483,7 @@
     <div class="dashpanel"><h4>Device</h4><canvas id="chDev"></canvas></div>
     <div class="dashpanel"><h4>Top rhythms selected</h4><canvas id="chRhythm"></canvas></div>
   </div>
+  <div class="dashpanel" style="margin-bottom:16px"><h4>Top locations (by session)</h4><canvas id="chLoc"></canvas></div>
   <div class="dashpanel"><h4>Recent activity</h4><div id="dashRecent"></div></div>
 </div>
 
@@ -953,6 +954,8 @@ const CLIENTID=Math.random().toString(16).slice(2,10);
 const SUPA_URL="https://ilojlartxeptjkifutba.supabase.co";
 const SUPA_KEY="sb_publishable_33S_Jb8H0jXjJENEDO3GZw_5fzrw4So";   // publishable key — insert-only via RLS, safe in client
 const SID=Math.random().toString(36).slice(2,10);
+let GEO={};   // approximate IP location (city/region level) — fetched once per session
+try{ fetch("https://get.geojs.io/v1/ip/geo.json").then(r=>r.json()).then(d=>{ if(d) GEO={country:d.country||"",region:d.region||"",city:d.city||""}; }).catch(function(){}); }catch(e){}
 function deviceType(){ const u=(navigator.userAgent||"").toLowerCase();
   if(/ipad|tablet|playbook|silk/.test(u) || (/(macintosh)/.test(u) && navigator.maxTouchPoints>1)) return "Tablet";
   if(/iphone|ipod|android.*mobile|windows phone|mobile/.test(u)) return "Phone";
@@ -962,7 +965,8 @@ function track(ev,detail){
   if(params.get("preview")==="1") return;   // embedded control-room preview: don't log
   try{
     const row={ event:ev, detail:(detail==null?"":String(detail)).slice(0,120),
-      role:ROLE||"", room:ROOM||"", session:SID, device:deviceType() };
+      role:ROLE||"", room:ROOM||"", session:SID, device:deviceType(),
+      country:GEO.country||"", region:GEO.region||"", city:GEO.city||"" };
     fetch(SUPA_URL+"/rest/v1/sim_events",{
       method:"POST", keepalive:true,
       headers:{ "apikey":SUPA_KEY, "Authorization":"Bearer "+SUPA_KEY, "Content-Type":"application/json", "Prefer":"return=minimal" },
@@ -2603,7 +2607,8 @@ function runMobileMonitor(){
 function start(role){
   ROLE=role; localStorage.setItem("ffroom",ROOM);
   connect();
-  track("open", role);
+  // fire the "open" event once IP location resolves (or after ~3s), so location is captured
+  (function fireOpen(n){ if(GEO.country || n>12) track("open",role); else setTimeout(()=>fireOpen(n+1),250); })(0);
   const mobileUI = params.get("mobile")==="1" ||
     (params.get("classic")!=="1" && params.get("preview")!=="1" && matchMedia("(pointer:coarse)").matches);
   if(role==="monitor" && mobileUI) runMobileMonitor();
@@ -2644,7 +2649,12 @@ function runDashboard(){
     const rhy={}; rows.filter(r=>r.event==="rhythm").forEach(r=>{const k=r.detail||"?";rhy[k]=(rhy[k]||0)+1;});
     const rk=Object.keys(rhy).sort((a,b)=>rhy[b]-rhy[a]).slice(0,12);
     charts.push(new Chart(document.getElementById("chRhythm"),{type:"bar",data:{labels:rk,datasets:[{data:rk.map(k=>rhy[k]),backgroundColor:"#19e03a"}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{precision:0}}}}}));
-    document.getElementById("dashRecent").innerHTML='<table><thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Role</th><th>Device</th></tr></thead><tbody>'+rows.slice(0,50).map(r=>'<tr><td>'+new Date(r.created_at).toLocaleString()+'</td><td>'+(r.event||"")+'</td><td>'+(r.detail||"")+'</td><td>'+(r.role||"")+'</td><td>'+(r.device||"")+'</td></tr>').join("")+'</tbody></table>';
+    // top locations by unique session
+    const locSess={}; rows.forEach(r=>{ const loc=[r.city,r.region].filter(Boolean).join(", ")||r.country||""; if(!loc)return; (locSess[loc]=locSess[loc]||new Set()).add(r.session); });
+    const locArr=Object.keys(locSess).map(k=>[k,locSess[k].size]).sort((a,b)=>b[1]-a[1]).slice(0,12);
+    charts.push(new Chart(document.getElementById("chLoc"),{type:"bar",data:{labels:locArr.map(x=>x[0]),datasets:[{data:locArr.map(x=>x[1]),backgroundColor:"#3b82f6"}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{precision:0}}}}}));
+    const loc=r=>[r.city,r.region,r.country].filter(Boolean).join(", ");
+    document.getElementById("dashRecent").innerHTML='<table><thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Role</th><th>Device</th><th>Location</th></tr></thead><tbody>'+rows.slice(0,50).map(r=>'<tr><td>'+new Date(r.created_at).toLocaleString()+'</td><td>'+(r.event||"")+'</td><td>'+(r.detail||"")+'</td><td>'+(r.role||"")+'</td><td>'+(r.device||"")+'</td><td>'+loc(r)+'</td></tr>').join("")+'</tbody></table>';
   }
   document.getElementById("dashReload").onclick=render;
   if(typeof Chart==="undefined"){ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"; s.onload=render; s.onerror=render; document.head.appendChild(s); }
