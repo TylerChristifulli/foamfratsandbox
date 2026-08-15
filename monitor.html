@@ -229,7 +229,7 @@
   .mscreen.active{display:flex;}
   .mband{position:relative;border-bottom:1px solid #131313;min-height:0;overflow:hidden;}
   .mband.ecg{flex:1.5;} .mband.spo2{flex:1;} .mband.co2{flex:1;}
-  .mband canvas{position:absolute;left:0;top:0;bottom:0;right:104px;display:block;}   /* leave room for the number column so the trace never runs under the digits */
+  .mband canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}   /* full band; the opaque number column covers the right edge so the trace never shows under the digits */
   .mband .mlead{position:absolute;top:7px;left:13px;font-size:13px;font-weight:700;z-index:2;letter-spacing:.5px;}
   .mband.ecg .mlead{color:var(--ecg);} .mband.spo2 .mlead{color:var(--spo2);}
   .mband.co2 .mlead{color:var(--co2);} .mband.nibp .mlead{color:var(--nibp);}
@@ -264,7 +264,6 @@
   .mtabs button.active{color:#fff;}
   .mtabs button.therapy{color:#ff9a3a;} .mtabs button.therapy.active{color:#ff5a1a;}
   @media (orientation:landscape){
-    #mobmon .mband:not(.nibp) canvas{right:90px;}
     #mobmon .mband:not(.nibp) .mval{width:90px;}
     #mobmon .mval b{font-size:30px;} #mobmon .mval.hr b{font-size:38px;} #mobmon .mval.bp b{font-size:24px;}
     #mobmon .mval span{font-size:10px;}
