@@ -269,6 +269,15 @@
     #mobmon .mval span{font-size:10px;}
     #mobmon .mband.ecg{flex:1.3;}
   }
+  /* phones: portrait only (tablets keep landscape). Short-side ≤520px ⇒ phone. */
+  #mobRotate{display:none;}
+  @media (orientation:landscape) and (max-height:520px){
+    #mobmon #mobRotate{display:flex;position:fixed;inset:0;z-index:130;background:#000;color:#fff;
+      flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px;}
+    #mobRotate .mrIcon{font-size:54px;animation:rhspin 2.6s ease-in-out infinite;transform-origin:center;}
+    #mobRotate .mrT{font-size:20px;font-weight:700;}
+    #mobRotate .mrS{font-size:13px;color:#9aa;}
+  }
   .mfs{background:none;border:1px solid #2a2a2a;color:#aaa;border-radius:8px;padding:3px 10px;font-size:14px;}
   /* Therapy */
   .thecg{position:relative;flex:0 0 32%;min-height:110px;border-bottom:1px solid #131313;overflow:hidden;background:#000;}
@@ -678,6 +687,7 @@
     <button data-sc="sc12"><span>🫀</span>12-Lead</button>
     <button data-sc="scTherapy" class="therapy"><span>⚡</span>Therapy</button>
   </nav>
+  <div id="mobRotate"><div class="mrIcon">📱</div><div class="mrT">Rotate to portrait</div><div class="mrS">The mobile monitor is built for portrait</div></div>
 </div>
 
 <!-- ============ CONTROL ============ -->
@@ -2555,9 +2565,9 @@ function start(role){
   ROLE=role; localStorage.setItem("ffroom",ROOM);
   connect();
   track("open", role);
-  const phone = params.get("mobile")==="1" ||
-    (params.get("classic")!=="1" && params.get("preview")!=="1" && matchMedia("(pointer:coarse) and (max-width:900px)").matches);
-  if(role==="monitor" && phone) runMobileMonitor();
+  const mobileUI = params.get("mobile")==="1" ||
+    (params.get("classic")!=="1" && params.get("preview")!=="1" && matchMedia("(pointer:coarse)").matches);
+  if(role==="monitor" && mobileUI) runMobileMonitor();
   else if(role==="monitor") runMonitor();
   else if(role==="camera") runCamera();
   else runControl();
