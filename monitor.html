@@ -451,9 +451,40 @@
     font-size:12px;font-weight:700;padding:6px 10px;border-radius:20px;}
   .campill.live{background:#b81212;}
   .campill.live::before{content:"● LIVE ";}
+  /* ---------- hidden analytics dashboard (?admin=1) ---------- */
+  #dash{display:none;position:fixed;inset:0;overflow:auto;background:#0b0d0b;color:#e6e6e6;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:20px;z-index:200;}
+  .dashhead{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .dashhead b{font-size:20px;} .dashhead #dashSub{color:#8a988c;font-size:12px;}
+  .dashhead button{margin-left:auto;background:#13243a;border:1px solid #25496e;color:#bfe2ff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;}
+  .dashcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:18px;}
+  .dashcard{background:#141814;border:1px solid #26302a;border-radius:12px;padding:14px 16px;}
+  .dashcard .k{font-size:11px;color:#8fbf9a;text-transform:uppercase;letter-spacing:.5px;}
+  .dashcard .v{font-size:30px;font-weight:800;margin-top:4px;}
+  .dashgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .dashpanel{background:#111;border:1px solid #242424;border-radius:12px;padding:16px;}
+  .dashpanel h4{margin:0 0 10px;font-size:13px;color:#8fbf9a;text-transform:uppercase;letter-spacing:.5px;}
+  .dashpanel canvas{max-height:260px;}
+  #dashRecent table{width:100%;border-collapse:collapse;font-size:12px;}
+  #dashRecent td,#dashRecent th{text-align:left;padding:5px 8px;border-bottom:1px solid #1c1c1c;}
+  #dashRecent th{color:#8a988c;}
+  @media(max-width:760px){.dashgrid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
+
+<!-- ============ HIDDEN ANALYTICS DASHBOARD (?admin=1) ============ -->
+<div id="dash">
+  <div class="dashhead"><b>FOAMfrat Sim — Usage</b><span id="dashSub">loading…</span><button id="dashReload">↻ Reload</button></div>
+  <div class="dashcards" id="dashCards"></div>
+  <div class="dashgrid">
+    <div class="dashpanel"><h4>Opens per day</h4><canvas id="chDay"></canvas></div>
+    <div class="dashpanel"><h4>Monitor vs Control</h4><canvas id="chRole"></canvas></div>
+    <div class="dashpanel"><h4>Device</h4><canvas id="chDev"></canvas></div>
+    <div class="dashpanel"><h4>Top rhythms selected</h4><canvas id="chRhythm"></canvas></div>
+  </div>
+  <div class="dashpanel"><h4>Recent activity</h4><div id="dashRecent"></div></div>
+</div>
 
 <!-- ============ ROLE CHOOSER ============ -->
 <div id="chooser">
@@ -918,17 +949,25 @@ let ROLE=params.get("role")||null;
 const TOPIC=()=>`foamfrat/simmon/${ROOM}/state`;
 const RTOPIC=()=>`foamfrat/simmon/${ROOM}/rtc`;     // WebRTC signaling channel
 const CLIENTID=Math.random().toString(16).slice(2,10);
-/* ---- anonymous usage analytics (aggregate counts only, no personal data) ---- */
-const ANALYTICS_URL="https://script.google.com/macros/s/AKfycbxlCLbhBSW4F6fKQEP_XACK60JVoky-9GBwb8SYQ_VGv0HOZ1eDgBevKUVTAwf1fJg/exec";
+/* ---- anonymous usage analytics → Supabase (aggregate events only, no personal data) ---- */
+const SUPA_URL="https://ilojlartxeptjkifutba.supabase.co";
+const SUPA_KEY="sb_publishable_33S_Jb8H0jXjJENEDO3GZw_5fzrw4So";   // publishable key — insert-only via RLS, safe in client
 const SID=Math.random().toString(36).slice(2,10);
+function deviceType(){ const u=(navigator.userAgent||"").toLowerCase();
+  if(/ipad|tablet|playbook|silk/.test(u) || (/(macintosh)/.test(u) && navigator.maxTouchPoints>1)) return "Tablet";
+  if(/iphone|ipod|android.*mobile|windows phone|mobile/.test(u)) return "Phone";
+  return "Desktop"; }
 function track(ev,detail){
-  if(!ANALYTICS_URL) return;
+  if(!SUPA_URL) return;
   if(params.get("preview")==="1") return;   // embedded control-room preview: don't log
   try{
-    const payload=JSON.stringify({ev,detail:(detail==null?"":detail),role:ROLE||"",room:ROOM||"",sid:SID,ua:navigator.userAgent});
-    const blob=new Blob([payload],{type:"text/plain;charset=UTF-8"});
-    if(navigator.sendBeacon){ navigator.sendBeacon(ANALYTICS_URL,blob); }
-    else{ fetch(ANALYTICS_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:payload,keepalive:true}); }
+    const row={ event:ev, detail:(detail==null?"":String(detail)).slice(0,120),
+      role:ROLE||"", room:ROOM||"", session:SID, device:deviceType() };
+    fetch(SUPA_URL+"/rest/v1/sim_events",{
+      method:"POST", keepalive:true,
+      headers:{ "apikey":SUPA_KEY, "Authorization":"Bearer "+SUPA_KEY, "Content-Type":"application/json", "Prefer":"return=minimal" },
+      body:JSON.stringify(row)
+    }).catch(function(){});
   }catch(e){}
 }
 // Connect through several public brokers at once — devices sync as long as they
@@ -2572,7 +2611,47 @@ function start(role){
   else if(role==="camera") runCamera();
   else runControl();
 }
+/* ---- hidden usage dashboard at ?admin=1 (reads sim_events via the publishable key) ---- */
+function runDashboard(){
+  document.getElementById("chooser").style.display="none";
+  document.getElementById("dash").style.display="block";
+  document.body.style.overflow="auto";
+  let charts=[];
+  async function render(){
+    charts.forEach(c=>{try{c.destroy();}catch(e){}}); charts=[];
+    const sub=document.getElementById("dashSub"); sub.textContent="loading…";
+    let rows=[];
+    try{
+      const r=await fetch(SUPA_URL+"/rest/v1/sim_events?select=created_at,event,detail,role,room,session,device&order=created_at.desc&limit=10000",
+        {headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}});
+      rows=await r.json();
+    }catch(e){ sub.textContent="Could not load data ("+e+")"; return; }
+    if(!Array.isArray(rows)){ sub.textContent="Read error: "+String((rows&&rows.message)||JSON.stringify(rows)).slice(0,180); return; }
+    const opens=rows.filter(r=>r.event==="open");
+    const sessions=new Set(rows.map(r=>r.session).filter(Boolean));
+    const rooms=new Set(rows.map(r=>r.room).filter(Boolean));
+    const cnt=ev=>rows.filter(r=>r.event===ev).length;
+    sub.textContent=rows.length+" events · updated "+new Date().toLocaleString();
+    const cards=[["Opens",opens.length],["Sessions",sessions.size],["Rooms",rooms.size],["Scenarios",cnt("scenario_start")],["Shocks",cnt("shock")],["12-leads",cnt("twelve_lead")]];
+    document.getElementById("dashCards").innerHTML=cards.map(c=>'<div class="dashcard"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join("");
+    if(typeof Chart==="undefined") return;
+    const byDay={}; opens.forEach(r=>{const k=(r.created_at||"").slice(0,10); if(k)byDay[k]=(byDay[k]||0)+1;});
+    const days=Object.keys(byDay).sort();
+    charts.push(new Chart(document.getElementById("chDay"),{type:"line",data:{labels:days,datasets:[{data:days.map(k=>byDay[k]),borderColor:"#19e03a",backgroundColor:"rgba(25,224,58,.15)",fill:true,tension:.3}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}}));
+    const pie=(id,obj,colors)=>charts.push(new Chart(document.getElementById(id),{type:"doughnut",data:{labels:Object.keys(obj),datasets:[{data:Object.values(obj),backgroundColor:colors}]},options:{plugins:{legend:{labels:{color:"#ccc"}}}}}));
+    pie("chRole",{Monitor:opens.filter(r=>r.role==="monitor").length,Control:opens.filter(r=>r.role==="control").length},["#19e03a","#3b82f6"]);
+    const devC={}; opens.forEach(r=>{const k=r.device||"?";devC[k]=(devC[k]||0)+1;}); pie("chDev",devC,["#f5e13a","#19e03a","#3b82f6","#888"]);
+    const rhy={}; rows.filter(r=>r.event==="rhythm").forEach(r=>{const k=r.detail||"?";rhy[k]=(rhy[k]||0)+1;});
+    const rk=Object.keys(rhy).sort((a,b)=>rhy[b]-rhy[a]).slice(0,12);
+    charts.push(new Chart(document.getElementById("chRhythm"),{type:"bar",data:{labels:rk,datasets:[{data:rk.map(k=>rhy[k]),backgroundColor:"#19e03a"}]},options:{indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{ticks:{precision:0}}}}}));
+    document.getElementById("dashRecent").innerHTML='<table><thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Role</th><th>Device</th></tr></thead><tbody>'+rows.slice(0,50).map(r=>'<tr><td>'+new Date(r.created_at).toLocaleString()+'</td><td>'+(r.event||"")+'</td><td>'+(r.detail||"")+'</td><td>'+(r.role||"")+'</td><td>'+(r.device||"")+'</td></tr>').join("")+'</tbody></table>';
+  }
+  document.getElementById("dashReload").onclick=render;
+  if(typeof Chart==="undefined"){ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"; s.onload=render; s.onerror=render; document.head.appendChild(s); }
+  else render();
+}
 (function init(){
+  if(params.get("admin")==="1"){ runDashboard(); return; }
   // release-notes modal
   const rel=document.getElementById("relnotes");
   document.getElementById("verChip").onclick=()=>rel.classList.add("show");
