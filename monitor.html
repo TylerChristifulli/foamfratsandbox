@@ -229,26 +229,29 @@
   .mscreen.active{display:flex;}
   .mband{position:relative;border-bottom:1px solid #131313;min-height:0;overflow:hidden;}
   .mband.ecg{flex:1.5;} .mband.spo2{flex:1;} .mband.co2{flex:1;}
-  .mband canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .mband canvas{position:absolute;left:0;top:0;bottom:0;right:104px;display:block;}   /* leave room for the number column so the trace never runs under the digits */
   .mband .mlead{position:absolute;top:7px;left:13px;font-size:13px;font-weight:700;z-index:2;letter-spacing:.5px;}
   .mband.ecg .mlead{color:var(--ecg);} .mband.spo2 .mlead{color:var(--spo2);}
   .mband.co2 .mlead{color:var(--co2);} .mband.nibp .mlead{color:var(--nibp);}
-  .mval{position:absolute;right:15px;bottom:8px;text-align:right;line-height:.95;z-index:2;}
+  .mval{position:absolute;right:0;top:0;bottom:0;width:104px;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;
+    padding-right:12px;text-align:right;line-height:.95;z-index:2;gap:2px;background:#000;border-left:1px solid #101010;}
   .mval b{display:block;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;}
-  .mval span{font-size:12px;color:#8a988c;}
-  .mval.hr b{color:var(--ecg);font-size:54px;} .mval.spo2 b{color:var(--spo2);}
-  .mval.co2 b{color:var(--co2);} .mval.bp b{color:var(--nibp);font-size:36px;}
+  .mval span{font-size:11px;color:#8a988c;}
+  .mval.hr b{color:var(--ecg);font-size:52px;} .mval.spo2 b{color:var(--spo2);}
+  .mval.co2 b{color:var(--co2);} .mval.bp b{color:var(--nibp);font-size:34px;}
   .mval i{font-style:normal;color:#cfcfcf;}
   .mband.alarm{box-shadow:inset 0 0 0 2px rgba(255,180,40,.5);}
   .mband.alarm .mval b{color:#ffb62e;}
-  .mband.alarm .mval::after{content:"HIGH";position:absolute;top:0;right:0;transform:translateY(-115%);
+  .mband.alarm .mval::after{content:"HIGH";position:absolute;top:5px;right:12px;
     font-size:10px;font-weight:800;letter-spacing:1px;color:#ffb62e;}
   .mband.alarm.low .mval::after{content:"LOW";}
+  #mmToast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);max-width:82%;background:#1a1a1a;border:1px solid #333;color:#eee;
+    padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.4;text-align:center;opacity:0;transition:opacity .3s;z-index:99;pointer-events:none;}
   .mband.crit{box-shadow:inset 0 0 0 2px rgba(255,60,60,.75);animation:mbflash 1s steps(1) infinite;}
   .mband.crit .mval b{color:var(--alarm);}
   @keyframes mbflash{50%{box-shadow:inset 0 0 0 2px rgba(255,60,60,.12);}}
   .mband.nibp{flex:0 0 auto;display:flex;align-items:center;padding:11px 15px;gap:12px;border-bottom:1px solid #131313;}
-  .mband.nibp .mlead{position:static;} .mband.nibp .mval{position:static;margin-left:auto;}
+  .mband.nibp .mlead{position:static;} .mband.nibp .mval{position:static;margin-left:auto;width:auto;height:auto;border-left:none;background:transparent;flex-direction:column;align-items:flex-end;}
   .mcyclebp{background:#13243a;border:1px solid #25496e;color:#bfe2ff;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:700;}
   .mstrip{flex:0 0 auto;display:flex;justify-content:space-around;gap:6px;padding:9px 8px;
     border-top:1px solid #161616;font-size:13px;color:#9aa;font-variant-numeric:tabular-nums;}
@@ -261,8 +264,10 @@
   .mtabs button.active{color:#fff;}
   .mtabs button.therapy{color:#ff9a3a;} .mtabs button.therapy.active{color:#ff5a1a;}
   @media (orientation:landscape){
-    #mobmon .mval b{font-size:30px;} #mobmon .mval.hr b{font-size:38px;} #mobmon .mval.bp b{font-size:26px;}
-    #mobmon .mval{right:12px;bottom:4px;} #mobmon .mval span{font-size:10px;}
+    #mobmon .mband:not(.nibp) canvas{right:90px;}
+    #mobmon .mband:not(.nibp) .mval{width:90px;}
+    #mobmon .mval b{font-size:30px;} #mobmon .mval.hr b{font-size:38px;} #mobmon .mval.bp b{font-size:24px;}
+    #mobmon .mval span{font-size:10px;}
     #mobmon .mband.ecg{flex:1.3;}
   }
   .mfs{background:none;border:1px solid #2a2a2a;color:#aaa;border-radius:8px;padding:3px 10px;font-size:14px;}
@@ -2443,10 +2448,21 @@ function runMobileMonitor(){
     setTimeout(()=>{ nibpBusy=false; updNums(); },2400); }
   $("mmCycleBp").onclick=cycleBp;
 
-  // fullscreen (works on Android / iPadOS; iPhone → use Add to Home Screen)
-  $("mmFs").onclick=()=>{ const el=document.getElementById("mobmon"); try{
-    if(!(document.fullscreenElement||document.webkitFullscreenElement)){ (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); }
-    else { (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); } }catch(e){} };
+  // fullscreen — works on Android/iPadOS; iPhone Safari blocks web fullscreen → guide to Add to Home Screen
+  { const fsRoot=document.documentElement, fsBtn=$("mmFs");
+    const fsSupported=!!(fsRoot.requestFullscreen||fsRoot.webkitRequestFullscreen);
+    if(window.navigator.standalone){ fsBtn.style.display="none"; }   // already full-screen home-screen app
+    let toastT=null;
+    const toast=msg=>{ let t=document.getElementById("mmToast"); if(!t){ t=document.createElement("div"); t.id="mmToast"; document.getElementById("mobmon").appendChild(t); }
+      t.textContent=msg; t.style.opacity="1"; clearTimeout(toastT); toastT=setTimeout(()=>{t.style.opacity="0";},4600); };
+    fsBtn.onclick=()=>{
+      if(fsSupported){ try{
+        if(!(document.fullscreenElement||document.webkitFullscreenElement)){ (fsRoot.requestFullscreen||fsRoot.webkitRequestFullscreen).call(fsRoot); }
+        else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+      }catch(e){ toast("Full screen isn't available in this browser."); } }
+      else { toast("iPhone: tap the Share button → “Add to Home Screen”, then open it from the icon to run full screen."); }
+    };
+  }
 
   /* ---------- THERAPY: Defib / Sync / Pacer ---------- */
   let thMode="defib", charging=false, armed=false, chargeT=null, holdRAF=null, holdStart=0;
