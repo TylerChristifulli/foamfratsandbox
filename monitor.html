@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sim Monitor">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href='data:application/manifest+json,{"name":"FOAMfrat Sim Monitor","short_name":"Sim Monitor","display":"standalone","orientation":"landscape","background_color":"%23000000","theme_color":"%23000000","start_url":"monitor.html"}'>
 <title>FoamFrat Sim Monitor</title>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/muuri/0.9.5/muuri.min.js"></script>
@@ -175,6 +179,34 @@
   .dbtn.shock.round.armed{background:linear-gradient(180deg,#ff7a1a,#e23d0c);border-color:#ffb066;color:#fff;
     box-shadow:0 0 18px rgba(255,90,20,.85);animation:armedpulse .8s ease-in-out infinite;}
   @keyframes armedpulse{50%{box-shadow:0 0 30px 5px rgba(255,90,20,1);}}
+
+  /* ===== phone-as-monitor — touch devices only, so the DESKTOP layout is never affected ===== */
+  #rotateHint{display:none;}
+  @media (pointer:coarse) and (max-width:900px){
+    #monitor .topbar{height:34px;font-size:11px;}
+    #monitor .params{width:34%;max-width:188px;}
+    #monitor .num.hr .val{font-size:40px;}
+    #monitor .num.nibp .val{font-size:22px;}
+    #monitor .num.etco2 .val{font-size:28px;}
+    #monitor .num.spo2 .val{font-size:34px;}
+    #monitor .num .lab{font-size:10px;}
+    #monitor .botbar{height:46px;}
+    #monitor .botbox .val{font-size:20px;}
+    #monitor .devbar{gap:8px;padding:8px 10px;flex-wrap:nowrap;overflow-x:auto;}
+    #monitor .devbar .dbtn{padding:11px 15px;font-size:15px;}
+    #monitor .devbar .dstep{width:40px;height:40px;font-size:20px;}
+    #monitor .devbar .dval{font-size:18px;min-width:34px;}
+    #monitor .devbar .dlab,#monitor .devbar .dunit{font-size:11px;}
+    #monitor .tapover{font-size:13px;}
+  }
+  @media (pointer:coarse) and (max-width:900px) and (orientation:portrait){
+    #monitor #rotateHint{display:flex;position:fixed;inset:0;z-index:95;background:#000;color:#fff;
+      flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:26px;}
+    #rotateHint .rhIcon{font-size:56px;animation:rhspin 2.6s ease-in-out infinite;transform-origin:center;}
+    #rotateHint .rhT{font-size:21px;font-weight:700;}
+    #rotateHint .rhS{font-size:13px;color:#9aa;}
+  }
+  @keyframes rhspin{0%,55%{transform:rotate(0);}80%,100%{transform:rotate(-90deg);}}
 
   /* ---------- Control ---------- */
   #control{display:none;height:100%;flex-direction:column;background:#0c0c0c;}
@@ -483,6 +515,7 @@
       <span class="dlab">Output</span><button class="dstep" id="maDown">−</button><span class="dval" id="maVal">0</span><span class="dunit">mA</span><button class="dstep" id="maUp">+</button>
     </div>
   </div>
+  <div id="rotateHint"><div class="rhIcon">📱</div><div class="rhT">Rotate your phone sideways</div><div class="rhS">The monitor is built for landscape</div></div>
 </div>
 
 <!-- ============ CONTROL ============ -->
@@ -559,6 +592,7 @@
           </select>
         </label>
         <button class="startbtn" id="acq12">📈 Acquire 12-Lead</button>
+        <button class="cyclebtn" id="close12">✕ Close 12-Lead</button>
       </div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">Pick a STEMI site (or None for a normal 12-lead), then Acquire — the 12-lead shows ST elevation in the matching leads and pops up on the monitor. Works with any underlying rhythm.</div>
     </div>
@@ -691,7 +725,7 @@ const STATE = {
   // transcutaneous pacing
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
-  stemiSite:"none", ecg12Seq:0, blankSeq:0,
+  stemiSite:"none", ecg12Seq:0, twelveCloseSeq:0, blankSeq:0,
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
@@ -1012,6 +1046,14 @@ function runMonitor(){
   document.getElementById("mRoom").textContent=ROOM;
   // preview mode = this monitor is embedded (shrunken) inside the Control Room
   const PREVIEW = params.get("preview")==="1";
+  // keep a phone screen awake while it's acting as the student monitor
+  if(!PREVIEW){
+    let wakeLock=null;
+    const reqWake=async()=>{ try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){} };
+    reqWake();
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") reqWake(); });
+    document.body.addEventListener("click",reqWake,{once:true});
+  }
 
   const ecg=new EcgEngine();
   const FS_pps=240;          // pixels per second sweep speed feel
@@ -1144,7 +1186,7 @@ function runMonitor(){
 
   // numbers + alarms
   let nibpShown=null, nibpCycling=false, eventsPrimed=false;
-  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0, lastTwelveSeq=STATE.ecg12Seq||0, lastBlankSeq=STATE.blankSeq||0;
+  let lastNibpSeq=STATE.nibpSeq||0, lastShockSeq=STATE.shockSeq||0, lastTwelveSeq=STATE.ecg12Seq||0, lastBlankSeq=STATE.blankSeq||0, lastTwelveClose=STATE.twelveCloseSeq||0;
   // don't fire shock/NIBP events from the retained state we receive on load;
   // re-baseline for ~2s while the initial sync settles, then arm real events.
   setTimeout(()=>{ eventsPrimed=true; }, 2000);
@@ -1191,11 +1233,12 @@ function runMonitor(){
   function updNums(){
     // events that arrive via state sync (suppressed until initial sync settles)
     if(!eventsPrimed){
-      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0; lastTwelveSeq=STATE.ecg12Seq||0; lastBlankSeq=STATE.blankSeq||0;
+      lastNibpSeq=STATE.nibpSeq||0; lastShockSeq=STATE.shockSeq||0; lastTwelveSeq=STATE.ecg12Seq||0; lastBlankSeq=STATE.blankSeq||0; lastTwelveClose=STATE.twelveCloseSeq||0;
     } else {
       if((STATE.nibpSeq||0)>lastNibpSeq){ lastNibpSeq=STATE.nibpSeq; cycleNibp(); }
       if((STATE.shockSeq||0)>lastShockSeq){ lastShockSeq=STATE.shockSeq; ecg.triggerShock(); flashShock(STATE.lastShockEnergy); }
       if((STATE.ecg12Seq||0)>lastTwelveSeq){ lastTwelveSeq=STATE.ecg12Seq; renderTwelveLead(); }
+      if((STATE.twelveCloseSeq||0)>lastTwelveClose){ lastTwelveClose=STATE.twelveCloseSeq; document.getElementById("twelve").classList.remove("show"); }
       if((STATE.blankSeq||0)>lastBlankSeq){ lastBlankSeq=STATE.blankSeq; blankMonitor(); }
     }
 
@@ -1951,6 +1994,7 @@ function runControl(){
   siteSel.value=STATE.stemiSite||"anterior";
   siteSel.onchange=e=>{ STATE.stemiSite=e.target.value; push("STEMI site "+STATE.stemiSite); };
   document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); track("twelve_lead", STATE.stemiSite||"normal"); };
+  document.getElementById("close12").onclick=()=>{ STATE.twelveCloseSeq=(STATE.twelveCloseSeq||0)+1; push("12-lead closed"); };
 
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
