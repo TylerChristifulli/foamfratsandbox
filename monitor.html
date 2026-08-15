@@ -181,23 +181,29 @@
   @keyframes armedpulse{50%{box-shadow:0 0 30px 5px rgba(255,90,20,1);}}
 
   /* ===== phone-as-monitor — touch devices only, so the DESKTOP layout is never affected ===== */
-  #rotateHint{display:none;}
+  #rotateHint{display:none;} #mCtrls{display:none;}
   @media (pointer:coarse) and (max-width:900px){
     #monitor .topbar{height:34px;font-size:11px;}
-    #monitor .params{width:34%;max-width:188px;}
-    #monitor .num.hr .val{font-size:40px;}
+    #monitor .date{display:none;}                 /* free up the top bar */
+    #monitor #mCtrls{display:inline-block;}
+    #monitor .params{width:33%;max-width:184px;}
+    #monitor .num.hr .val{font-size:42px;}
     #monitor .num.nibp .val{font-size:22px;}
-    #monitor .num.etco2 .val{font-size:28px;}
-    #monitor .num.spo2 .val{font-size:34px;}
+    #monitor .num.etco2 .val{font-size:30px;}
+    #monitor .num.spo2 .val{font-size:36px;}
     #monitor .num .lab{font-size:10px;}
-    #monitor .botbar{height:46px;}
-    #monitor .botbox .val{font-size:20px;}
-    #monitor .devbar{gap:8px;padding:8px 10px;flex-wrap:nowrap;overflow-x:auto;}
-    #monitor .devbar .dbtn{padding:11px 15px;font-size:15px;}
-    #monitor .devbar .dstep{width:40px;height:40px;font-size:20px;}
-    #monitor .devbar .dval{font-size:18px;min-width:34px;}
-    #monitor .devbar .dlab,#monitor .devbar .dunit{font-size:11px;}
     #monitor .tapover{font-size:13px;}
+    /* declutter: hide the defib bar + pressure strip so the waveforms + numbers own the screen.
+       Tap "⚡ Defib" in the top bar to bring the defibrillator controls back when needed. */
+    #monitor .devbar, #monitor .botbar{display:none;}
+    #monitor.showdev .botbar{display:flex;height:42px;}
+    #monitor.showdev .botbox .val{font-size:18px;}
+    #monitor.showdev .devbar{display:flex;gap:8px;padding:8px 10px;flex-wrap:nowrap;overflow-x:auto;}
+    #monitor.showdev .devbar .dbtn{padding:11px 15px;font-size:15px;}
+    #monitor.showdev .devbar .dstep{width:40px;height:40px;font-size:20px;}
+    #monitor.showdev .devbar .dval{font-size:18px;min-width:34px;}
+    #monitor.showdev .devbar .dlab,#monitor.showdev .devbar .dunit{font-size:11px;}
+    #monitor.showdev #mCtrls{background:var(--co2);color:#000;border-color:var(--co2);}
   }
   @media (pointer:coarse) and (max-width:900px) and (orientation:portrait){
     #monitor #rotateHint{display:flex;position:fixed;inset:0;z-index:95;background:#000;color:#fff;
@@ -207,6 +213,62 @@
     #rotateHint .rhS{font-size:13px;color:#9aa;}
   }
   @keyframes rhspin{0%,55%{transform:rotate(0);}80%,100%{transform:rotate(-90deg);}}
+
+  /* ===================== PURPOSE-BUILT MOBILE MONITOR ===================== */
+  #mobmon{display:none;position:fixed;inset:0;flex-direction:column;background:#000;color:#fff;z-index:40;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  body.mob{overflow:hidden;}
+  .mtop{display:flex;align-items:center;gap:10px;padding:6px 14px;font-size:13px;color:#cfcfcf;
+    border-bottom:1px solid #161616;font-variant-numeric:tabular-nums;}
+  .mtop .mroom{margin-left:auto;color:#8a988c;} .mtop .mroom b{color:var(--ecg);letter-spacing:1px;}
+  .mtop .mdot{width:9px;height:9px;border-radius:50%;background:#555;}
+  .mtop .mdot.on{background:var(--ecg);box-shadow:0 0 7px var(--ecg);}
+  .mbody{flex:1;display:flex;flex-direction:column;min-height:0;}
+  .mscreen{flex:1;display:none;flex-direction:column;min-height:0;}
+  .mscreen.active{display:flex;}
+  .mband{position:relative;border-bottom:1px solid #131313;min-height:0;overflow:hidden;}
+  .mband.ecg{flex:1.5;} .mband.spo2{flex:1;} .mband.co2{flex:1;}
+  .mband canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .mband .mlead{position:absolute;top:7px;left:13px;font-size:13px;font-weight:700;z-index:2;letter-spacing:.5px;}
+  .mband.ecg .mlead{color:var(--ecg);} .mband.spo2 .mlead{color:var(--spo2);}
+  .mband.co2 .mlead{color:var(--co2);} .mband.nibp .mlead{color:var(--nibp);}
+  .mval{position:absolute;right:15px;bottom:8px;text-align:right;line-height:.95;z-index:2;}
+  .mval b{display:block;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .mval span{font-size:12px;color:#8a988c;}
+  .mval.hr b{color:var(--ecg);font-size:54px;} .mval.spo2 b{color:var(--spo2);}
+  .mval.co2 b{color:var(--co2);} .mval.bp b{color:var(--nibp);font-size:36px;}
+  .mval i{font-style:normal;color:#cfcfcf;}
+  .mband.alarm{box-shadow:inset 0 0 0 2px rgba(255,180,40,.5);}
+  .mband.alarm .mval b{color:#ffb62e;}
+  .mband.alarm .mval::after{content:"HIGH";position:absolute;top:0;right:0;transform:translateY(-115%);
+    font-size:10px;font-weight:800;letter-spacing:1px;color:#ffb62e;}
+  .mband.alarm.low .mval::after{content:"LOW";}
+  .mband.crit{box-shadow:inset 0 0 0 2px rgba(255,60,60,.75);animation:mbflash 1s steps(1) infinite;}
+  .mband.crit .mval b{color:var(--alarm);}
+  @keyframes mbflash{50%{box-shadow:inset 0 0 0 2px rgba(255,60,60,.12);}}
+  .mband.nibp{flex:0 0 auto;display:flex;align-items:center;padding:11px 15px;gap:12px;border-bottom:1px solid #131313;}
+  .mband.nibp .mlead{position:static;} .mband.nibp .mval{position:static;margin-left:auto;}
+  .mcyclebp{background:#13243a;border:1px solid #25496e;color:#bfe2ff;border-radius:9px;padding:9px 13px;font-size:13px;font-weight:700;}
+  .mstrip{flex:0 0 auto;display:flex;justify-content:space-around;gap:6px;padding:9px 8px;
+    border-top:1px solid #161616;font-size:13px;color:#9aa;font-variant-numeric:tabular-nums;}
+  .mstrip b{color:#fff;}
+  .mph{flex:1;display:flex;align-items:center;justify-content:center;color:#7a8a7e;font-size:15px;text-align:center;padding:34px;line-height:1.5;}
+  .mtabs{flex:0 0 auto;display:flex;border-top:1px solid #1c1c1c;background:#0a0a0a;}
+  .mtabs button{flex:1;background:none;border:none;color:#8a988c;padding:9px 4px 11px;font-size:11px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .mtabs button span{font-size:19px;}
+  .mtabs button.active{color:#fff;}
+  .mtabs button.therapy{color:#ff9a3a;} .mtabs button.therapy.active{color:#ff5a1a;}
+  @media (orientation:landscape){
+    #mobmon .mband:not(.nibp){display:flex;align-items:center;}
+    #mobmon .mband:not(.nibp) canvas{position:relative;inset:auto;flex:1;height:100%;}
+    #mobmon .mband:not(.nibp) .mlead{position:static;width:46px;flex:0 0 auto;padding-left:6px;}
+    #mobmon .mband:not(.nibp) .mval{position:static;width:86px;flex:0 0 auto;bottom:auto;padding-right:6px;}
+    #mobmon .mband.ecg,#mobmon .mband.spo2,#mobmon .mband.co2{flex:1;}
+    #mobmon .mval b{font-size:34px;} #mobmon .mval.hr b{font-size:40px;}
+    #mobmon .mband.alarm .mval::after{position:static;display:block;transform:none;}
+  }
 
   /* ---------- Control ---------- */
   #control{display:none;height:100%;flex-direction:column;background:#0c0c0c;}
@@ -444,6 +506,7 @@
     <button class="cambtn" id="m12Lead">12-Lead</button>
     <button class="cambtn" id="mFull">⛶ Full</button>
     <button class="cambtn" id="mCamBtn">🎥 Camera</button>
+    <button class="cambtn" id="mCtrls" title="Show/hide defibrillator controls">⚡ Defib</button>
     <span class="batt">100%</span>
     <span class="clock" id="mClock">00:00:00</span>
   </div>
@@ -516,6 +579,41 @@
     </div>
   </div>
   <div id="rotateHint"><div class="rhIcon">📱</div><div class="rhT">Rotate your phone sideways</div><div class="rhS">The monitor is built for landscape</div></div>
+</div>
+
+<!-- ============ MOBILE MONITOR (purpose-built for phones) ============ -->
+<div id="mobmon">
+  <div class="mtop">
+    <span id="mmClock">--:--</span>
+    <span class="mdot" id="mmDot"></span>
+    <span class="mroom">Room <b id="mmRoom"></b></span>
+  </div>
+  <div class="mbody">
+    <div class="mscreen active" id="scMonitor">
+      <div class="mband ecg"><div class="mlead">II</div><canvas id="mmEcg"></canvas>
+        <div class="mval hr" id="vHr"><b>--</b><span>HR</span></div></div>
+      <div class="mband spo2"><div class="mlead">SpO₂</div><canvas id="mmPleth"></canvas>
+        <div class="mval spo2" id="vSpo2"><b>--</b><span>%</span></div></div>
+      <div class="mband co2"><div class="mlead">CO₂</div><canvas id="mmCo2"></canvas>
+        <div class="mval co2" id="vCo2"><b>--</b><span>mmHg · RR <i id="vRr">--</i></span></div></div>
+      <div class="mband nibp"><div class="mlead">NIBP</div>
+        <div class="mval bp" id="vBp"><b>--/--</b><span>MAP <i id="vMap">--</i></span></div>
+        <button class="mcyclebp" id="mmCycleBp">↻ Cycle</button></div>
+      <div class="mstrip">
+        <span>HR <b id="sHrv">--</b></span><span>SpO₂ <b id="sSpo2v">--</b></span>
+        <span>RR <b id="sRrv">--</b></span><span>CO₂ <b id="sCo2v">--</b></span><span>MAP <b id="sMapv">--</b></span>
+      </div>
+    </div>
+    <div class="mscreen" id="sc12"><div class="mph">12-Lead view<br><small>dedicated lead layout — coming in the next update</small></div></div>
+    <div class="mscreen" id="scTrends"><div class="mph">Trends &amp; event timeline<br><small>physiology over time — coming in the next update</small></div></div>
+    <div class="mscreen" id="scTherapy"><div class="mph">Therapy — Defib · Sync · Pacer<br><small>dedicated therapy screens — coming in the next update</small></div></div>
+  </div>
+  <nav class="mtabs">
+    <button data-sc="scMonitor" class="active"><span>📈</span>Monitor</button>
+    <button data-sc="sc12"><span>🫀</span>12-Lead</button>
+    <button data-sc="scTrends"><span>📊</span>Trends</button>
+    <button data-sc="scTherapy" class="therapy"><span>⚡</span>Therapy</button>
+  </nav>
 </div>
 
 <!-- ============ CONTROL ============ -->
@@ -1343,6 +1441,7 @@ function runMonitor(){
 
   // 12-lead snapshot (acquire from the monitor, or remotely from Control)
   document.getElementById("m12Lead").onclick=()=>{ renderTwelveLead(); track("twelve_lead", STATE.stemiSite||"normal"); };
+  { const mc=document.getElementById("mCtrls"); if(mc) mc.onclick=()=>document.getElementById("monitor").classList.toggle("showdev"); }
   document.getElementById("tvClose").onclick=()=>document.getElementById("twelve").classList.remove("show");
 
   // fullscreen toggle (works on desktop & iPad Safari that support the Fullscreen API)
@@ -2194,11 +2293,114 @@ function runControl(){
 /* =========================================================================
    BOOT
    ========================================================================= */
+/* =========================================================================
+   PURPOSE-BUILT MOBILE MONITOR — a phone-native UI (waveforms first, numbers
+   beside their signal, controls hidden until intentional). Shares the engine
+   and the control-panel sync; the desktop monitor is untouched.
+   ========================================================================= */
+function runMobileMonitor(){
+  document.getElementById("chooser").style.display="none";
+  document.getElementById("mobmon").style.display="flex";
+  document.body.classList.add("mob");
+  document.getElementById("mmRoom").textContent=ROOM;
+  const $=id=>document.getElementById(id);
+  // keep the phone awake
+  { let wl=null; const rq=async()=>{try{ if("wakeLock" in navigator) wl=await navigator.wakeLock.request("screen"); }catch(e){}};
+    rq(); document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") rq(); });
+    document.body.addEventListener("click",rq,{once:true}); }
+  // clock + connection dot
+  const clk=()=>{ const d=new Date(); $("mmClock").textContent=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+  clk(); setInterval(clk,1000);
+  setInterval(()=>$("mmDot").classList.toggle("on",anyConnected()),1500);
+
+  // ---- signal generators (reuse the shared engine + waveform math) ----
+  const ecg=new EcgEngine();
+  let plethPhase=0, co2Phase=0;
+  const captured=()=> STATE.pacerOn && STATE.pacerMa>=STATE.captureMa && STATE.rhythm!=="vfib";
+  const noPulse=()=>{ if(captured()) return false; return STATE.pea||STATE.rhythm==="vfib"||STATE.rhythm==="asystole"; };
+  const effRate=()=> captured()? STATE.pacerRate : (STATE.hr>0?STATE.hr:60);
+  function plethVal(){ if(noPulse()||STATE.spo2<1) return 0; const period=60/effRate(), x=(plethPhase%period)/period; let y;
+    if(x<0.13){const u=x/0.13;y=0.15+0.85*(u*u*(3-2*u));}
+    else if(x<0.42){const u=(x-0.13)/0.29;y=1.0-0.55*(u*u*(3-2*u));}
+    else if(x<0.56){const u=(x-0.42)/0.14;y=0.45+0.12*Math.sin(Math.PI*u);}
+    else{const u=(x-0.56)/0.44;y=0.45-0.30*(u*u*(3-2*u));}
+    const perf=(STATE.perfusion==null?100:STATE.perfusion)/100; return y*(STATE.spo2/100)*perf; }
+  function co2Val(){ if(STATE.etco2On===false||STATE.rr<1) return 0; const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
+    const upA=0.30,upB=0.37,plB=0.72,dnB=0.78;
+    if(x<upA)return 0;
+    if(x<upB){const u=(x-upA)/(upB-upA);return et*0.92*(1-(1-u)*(1-u));}
+    if(x<plB){const u=(x-upB)/(plB-upB);return et*(0.92+0.08*(1-(1-u)*(1-u)));}
+    if(x<dnB){const u=(x-plB)/(dnB-plB);return et*(1-u*u);}
+    return 0; }
+
+  function mkWave(id,fn,opt){ const cv=$(id); if(!cv) return {tick(){}}; const ctx=cv.getContext("2d"); let W,H,x=0,prevY=null;
+    function resize(){ const r=cv.getBoundingClientRect(); cv.width=Math.max(1,r.width*devicePixelRatio); cv.height=Math.max(1,r.height*devicePixelRatio);
+      W=cv.width;H=cv.height; ctx.lineWidth=2.2*devicePixelRatio; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null; }
+    new ResizeObserver(resize).observe(cv); resize();
+    return { tick(dt){ const pps=(opt.pps||150)*devicePixelRatio, nx=x+pps*dt;
+      ctx.fillStyle="#000"; ctx.fillRect(nx,0,7*devicePixelRatio,H);
+      const v=fn(); const yy=H*opt.base - v*opt.amp*H;
+      if(prevY!==null){ ctx.strokeStyle=opt.color; ctx.beginPath(); ctx.moveTo(x,prevY); ctx.lineTo(nx,yy); ctx.stroke(); }
+      prevY=yy; x=nx; if(x>=W){ x=0; prevY=null; } } }; }
+  const waves=[
+    mkWave("mmEcg",  ()=>ecg.value(), {amp:0.26, base:0.60, color:getCss("--ecg"),  pps:160}),
+    mkWave("mmPleth",()=>plethVal(),  {amp:0.60, base:0.84, color:getCss("--spo2"), pps:150}),
+    mkWave("mmCo2",  ()=>co2Val(),    {amp:0.60/60, base:0.88, color:getCss("--co2"), pps:90}),
+  ];
+
+  // ---- numbers + per-parameter alarm emphasis ----
+  const bandOf=id=>$(id).closest(".mband");
+  function setAlarm(el,level,low){ el.classList.remove("alarm","crit","low"); if(low) el.classList.add("low");
+    if(level==="warn") el.classList.add("alarm"); else if(level==="crit"){ el.classList.add("alarm","crit"); } }
+  function updNums(){
+    const cap=captured(), np=noPulse();
+    const hr = STATE.rhythm==="asystole"?0 : (STATE.rhythm==="vfib"?"--" : (cap?STATE.pacerRate:STATE.hr));
+    const spo2 = np? "--" : STATE.spo2;
+    const co2 = STATE.etco2On===false? "--" : STATE.etco2;
+    const rr = STATE.etco2On===false? "--" : STATE.rr;
+    const bp = STATE.sys>0? STATE.sys+"/"+STATE.dia : "--/--";
+    const map = STATE.sys>0? Math.round((STATE.sys+2*STATE.dia)/3) : "--";
+    $("vHr").firstElementChild.textContent=hr; $("vSpo2").firstElementChild.textContent=spo2;
+    $("vCo2").firstElementChild.textContent=co2; $("vRr").textContent=rr;
+    $("vBp").firstElementChild.textContent=bp; $("vMap").textContent=map;
+    $("sHrv").textContent=hr; $("sSpo2v").textContent=spo2; $("sRrv").textContent=rr; $("sCo2v").textContent=co2; $("sMapv").textContent=map;
+    let hrL="ok",hrLow=false; if(typeof hr==="number"){ if(hr>=150){hrL="crit";} else if(hr>120){hrL="warn";} else if(hr<=35){hrL="crit";hrLow=true;} else if(hr<50){hrL="warn";hrLow=true;} } else if(STATE.rhythm==="vfib") hrL="crit";
+    setAlarm(bandOf("mmEcg"),hrL,hrLow);
+    let spL="ok"; let spLow=true; if(typeof spo2==="number"){ if(spo2<85)spL="crit"; else if(spo2<90)spL="warn"; }
+    setAlarm(bandOf("mmPleth"),spL,spLow);
+    let coL="ok",coLow=false; if(typeof co2==="number"){ if(co2>60)coL="warn"; else if(co2<20){coL="warn";coLow=true;} }
+    setAlarm(bandOf("mmCo2"),coL,coLow);
+  }
+  onState.push(updNums); updNums(); setInterval(updNums,400);
+
+  $("mmCycleBp").onclick=()=>{ STATE.nibpSeq=(STATE.nibpSeq||0)+1; updNums(); };
+
+  // tab switching
+  document.querySelectorAll("#mobmon .mtabs button").forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll("#mobmon .mscreen").forEach(s=>s.classList.remove("active"));
+      $(b.dataset.sc).classList.add("active");
+      document.querySelectorAll("#mobmon .mtabs button").forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+    };
+  });
+
+  // render loop
+  let last=performance.now(), acc=0; const DT=1/240;
+  function frame(now){ let dt=Math.min((now-last)/1000,0.1); last=now; acc+=dt;
+    while(acc>=DT){ ecg.step(DT); plethPhase+=DT; co2Phase+=DT; waves.forEach(w=>w.tick(DT)); acc-=DT; }
+    requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+}
+
 function start(role){
   ROLE=role; localStorage.setItem("ffroom",ROOM);
   connect();
   track("open", role);
-  if(role==="monitor") runMonitor();
+  const phone = params.get("mobile")==="1" ||
+    (params.get("classic")!=="1" && params.get("preview")!=="1" && matchMedia("(pointer:coarse) and (max-width:900px)").matches);
+  if(role==="monitor" && phone) runMobileMonitor();
+  else if(role==="monitor") runMonitor();
   else if(role==="camera") runCamera();
   else runControl();
 }
