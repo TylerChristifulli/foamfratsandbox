@@ -737,13 +737,13 @@ const onState=[], onSignal=[], seenSignals=[];
 function anyConnected(){ return mqttPool.some(c=>c&&c.connected); }
 
 function broadcast(){
-  const payload=JSON.stringify(STATE);
+  const payload=JSON.stringify(Object.assign({__src:CLIENTID}, STATE));  // tag sender so we can ignore our own echo
   mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(TOPIC(),payload,{retain:true}); }catch(e){} });
   try{ if(bc) bc.postMessage(payload); }catch(e){}
   // push straight into the embedded Control-Room preview iframe (same-origin, always reliable)
   try{ const pf=document.getElementById("pvIframe"); if(pf&&pf.contentWindow) pf.contentWindow.postMessage({__ffstate:payload},location.origin); }catch(e){}
 }
-function applyState(obj){ Object.assign(STATE,obj); onState.forEach(f=>f()); }
+function applyState(obj){ Object.assign(STATE,obj); delete STATE.__src; onState.forEach(f=>f()); }
 // WebRTC signaling: small JSON messages (offer/answer/ice), sender-tagged + id'd for cross-broker dedupe
 function sendSignal(obj){
   obj.from=CLIENTID; obj.sid=Math.random().toString(16).slice(2,10);
@@ -780,7 +780,7 @@ function connect(){
           if(m.sid){ if(seenSignals.indexOf(m.sid)>=0) return; seenSignals.push(m.sid); if(seenSignals.length>256) seenSignals.shift(); }
           onSignal.forEach(f=>f(m)); }catch(_){}
       } else {
-        try{ applyState(JSON.parse(msg.toString())); }catch(_){}
+        try{ const obj=JSON.parse(msg.toString()); if(obj.__src===CLIENTID) return; applyState(obj); }catch(_){}
       }
     });
   });
@@ -1727,11 +1727,16 @@ function runControl(){
     ["sPrate","pacerRate","lPrate",1],["sPma","pacerMa","lPma",1],["sCap","captureMa","lCap",1]];
   const fToC=f=>(f-32)*5/9, cToF=c=>c*9/5+32;
   const labVal=key=> key==="temp" ? (STATE.tempC?fToC(STATE.temp):STATE.temp).toFixed(1) : String(STATE[key]);
+  // during a drag we update locally every frame but only send to the network ~16×/sec (no per-pixel flooding/logging)
+  let sbT=null, sbPending=false;
+  function sliderBroadcast(){ if(sbT){ sbPending=true; return; } broadcast();
+    sbT=setTimeout(()=>{ sbT=null; if(sbPending){ sbPending=false; broadcast(); } },60); }
   map.forEach(([sid,key,lid])=>{
     const s=document.getElementById(sid), lab=document.getElementById(lid);
     s.value=STATE[key];
     s.oninput=()=>{STATE[key]= key==="temp"?parseFloat(s.value):parseInt(s.value);
-      lab.textContent=labVal(key); push(null);};
+      lab.textContent=labVal(key); sliderBroadcast();};
+    s.onchange=()=>push(null);   // on release: final sync + competency log
     // type an exact value (in addition to the slider)
     lab.contentEditable="true"; lab.spellcheck=false; lab.style.cursor="text";
     const commit=()=>{
