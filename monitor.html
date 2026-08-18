@@ -2609,8 +2609,12 @@ function start(role){
   connect();
   // fire the "open" event once IP location resolves (or after ~3s), so location is captured
   (function fireOpen(n){ if(GEO.country || n>12) track("open",role); else setTimeout(()=>fireOpen(n+1),250); })(0);
+  // phone = a touch device whose SHORT side is small (~≤540px). Tablets/iPads (short side ≥768)
+  // and desktop get the full classic monitor; only phones get the purpose-built mobile UI.
+  const isPhone = matchMedia("(pointer:coarse) and (max-width:540px)").matches
+               || matchMedia("(pointer:coarse) and (max-height:540px)").matches;
   const mobileUI = params.get("mobile")==="1" ||
-    (params.get("classic")!=="1" && params.get("preview")!=="1" && matchMedia("(pointer:coarse)").matches);
+    (params.get("classic")!=="1" && params.get("preview")!=="1" && isPhone);
   if(role==="monitor" && mobileUI) runMobileMonitor();
   else if(role==="monitor") runMonitor();
   else if(role==="camera") runCamera();
