@@ -1527,7 +1527,11 @@ function runMonitor(){
   // tap a waveform to connect it; long-press a connected channel to disconnect it
   document.querySelectorAll(".tapover").forEach(ov=>{
     const ch=ov.dataset.ch, lane=ov.parentElement;
-    ov.onclick=()=>{ setChannel(ch,true); if(beep&&beep.state==="suspended") beep.resume(); updNums(); };
+    ov.style.cursor="pointer";
+    const connect=()=>{ setChannel(ch,true); if(beep&&beep.state==="suspended") beep.resume(); updNums(); };
+    ov.addEventListener("click",connect);
+    // iPad/touch: iOS doesn't reliably synthesize a click on a plain div, so handle the tap directly
+    ov.addEventListener("touchend",e=>{ e.preventDefault(); connect(); },{passive:false});
     let holdT=null;
     lane.addEventListener("pointerdown",()=>{ if(!active[ch]) return; holdT=setTimeout(()=>{ setChannel(ch,false); updNums(); holdT=null; },650); });
     ["pointerup","pointerleave","pointercancel"].forEach(ev=>lane.addEventListener(ev,()=>{ if(holdT){clearTimeout(holdT);holdT=null;} }));
