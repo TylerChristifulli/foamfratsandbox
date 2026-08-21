@@ -1718,59 +1718,266 @@ function getCss(v){return getComputedStyle(document.documentElement).getProperty
    simplified per-lead vector model + territory-specific ST changes.
    ========================================================================= */
 const LEAD12=[["I","aVR","V1","V4"],["II","aVL","V2","V5"],["III","aVF","V3","V6"]];
-const LEADF={I:0.7,II:1.0,III:0.45,aVR:-0.8,aVL:0.45,aVF:0.7,V1:-0.4,V2:0.5,V3:0.9,V4:1.2,V5:1.0,V6:0.75};
-const STEMI_ST={
-  anterior:{V1:0.30,V2:0.50,V3:0.55,V4:0.45,V5:0.25,II:-0.18,III:-0.18,aVF:-0.18},
-  septal:{V1:0.45,V2:0.52,V3:0.28,aVR:0.12},
-  inferior:{II:0.48,III:0.55,aVF:0.46,I:-0.22,aVL:-0.26},
-  lateral:{I:0.38,aVL:0.40,V5:0.38,V6:0.34,III:-0.20,aVF:-0.16}
+
+/* =========================================================================
+   12-LEAD VECTOR MODEL
+   The heart is treated as a single electrical dipole: one 3D vector that
+   changes through the beat. Each lead is a direction in that space, and the
+   trace a lead draws is just the vector projected onto (dotted with) it.
+
+   Coordinates (patient-centred):  +x = patient's LEFT
+                                   +y = FEET (inferior)
+                                   +z = BACK (posterior);  -z = anterior
+
+   Lead geometry and gain tables adapted from the FOAMfrat 12-Lead Generator
+   (twelve-lead/, MIT) so the two tools stay physiologically consistent.
+   ========================================================================= */
+/* Calibration: the projection model produces larger raw deflections than the
+   old scalar one. This scales the whole 12-lead so peak height still fits the
+   existing cell geometry — measured, not guessed (see peak-amplitude probe). */
+const V_CAL = 0.57;
+
+const V_D = Math.PI / 180;
+function vFrontal(deg){ return [Math.cos(deg*V_D), Math.sin(deg*V_D), 0]; }
+function vTransverse(deg){ return [Math.cos(deg*V_D), 0, -Math.sin(deg*V_D)]; }
+function vUnit(v){ const m=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/m,v[1]/m,v[2]/m]; }
+function vDot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function vAxis(deg, posterior){ return vUnit([Math.cos(deg*V_D), Math.sin(deg*V_D), posterior||0]); }
+
+const LEAD_VEC = {
+  I:vFrontal(0), II:vFrontal(60), III:vFrontal(120),
+  aVR:vFrontal(-150), aVL:vFrontal(-30), aVF:vFrontal(90),
+  V1:vTransverse(115), V2:vTransverse(94), V3:vTransverse(63),
+  V4:vTransverse(48),  V5:vTransverse(23), V6:vTransverse(0)
 };
+/* A central dipole can't know the chest electrodes sit closer to the heart
+   than the limb electrodes. These proximity gains are what make V2-V4 tall
+   and the limb leads modest, the way a real 12-lead looks. */
+const GAIN_QRS = {I:1,II:1,III:1,aVR:1,aVL:1,aVF:1,
+                  V1:1.20,V2:2.55,V3:2.45,V4:2.35,V5:1.85,V6:1.40};
+/* A ventricular or paced beat spreads slowly through muscle as a broad front
+   rather than a compact dipole, so it gets far less precordial boost. Using
+   the normal gains would drive VT clean off the paper in V2-V4. */
+const GAIN_VENT = {I:1,II:1,III:1,aVR:1,aVL:1,aVF:1,
+                   V1:1.05,V2:1.15,V3:1.15,V4:1.12,V5:1.05,V6:1.00};
+/* Injury current is slower and more diffuse than the QRS spike, so its
+   precordial boost is smaller. Without this, a 2 mm inferior STEMI would
+   render as 7 mm of anterior elevation. */
+const GAIN_ST = {I:1,II:1,III:1,aVR:1,aVL:1,aVF:1,
+                 V1:1.15,V2:1.45,V3:1.45,V4:1.40,V5:1.25,V6:1.10};
+
+/* Territories are injury-current DIRECTIONS, not per-lead tables. Leads facing
+   the same way see elevation; leads facing away see reciprocal depression,
+   automatically — no second table to keep in sync. */
+const TERRITORY_DIR = {
+  septal:   vUnit([-0.25, 0.05,-1.00]),
+  anterior: vUnit([ 0.05, 0.10,-1.00]),
+  lateral:  vUnit([ 0.92,-0.15,-0.35]),
+  /* Tilted slightly rightward, not straight down: an RCA occlusion aims the
+     injury current inferior AND to the patient's right. That is what makes
+     III taller than II — the classic RCA-vs-circumflex discriminator — and
+     gives lead I a genuine reciprocal change instead of a dead-flat zero. */
+  inferior: vUnit([-0.18, 1.00, 0.10])
+};
+
+function vBump(u){ return u<=0||u>=1 ? 0 : 0.5*(1-Math.cos(2*Math.PI*u)); }
+/* Asymmetric lobe: slow up, quicker down (or the reverse). Real T waves are
+   not symmetrical, and the asymmetry is a teaching cue in itself. */
+function vAsym(u, peak){
+  if(u<=0||u>=1) return 0;
+  return u<peak ? 0.5*(1-Math.cos(Math.PI*u/peak))
+                : 0.5*(1+Math.cos(Math.PI*(u-peak)/(1-peak)));
+}
+
+/* Build the beat template for the current rhythm: a list of QRS lobes (each a
+   time window + amplitude + direction), plus P, T and injury vectors. */
+function buildTemplate(c, site){
+  const alpha = 45;                                  // typical normal frontal axis
+  const wide  = !!c.wide;
+  const qrsMs = Math.round((c.qrs || 0.09) * 1000);
+
+  const tpl = {
+    pAmp: c.p || 0, pDur: 100, pDir: vUnit([0.5,0.87,-0.18]),
+    pr: Math.round((c.pr || 0.16) * 1000),
+    qrsDur: qrsMs,
+    lobes: [
+      // Septal depolarisation runs left-to-right and anterior: this single
+      // vector is what puts a small q in I/aVL/V5/V6 and the initial r in V1,
+      // instead of a q appearing in every lead at once.
+      {t0:0,  t1:22, amp:0.20*(c.r||1), dir:vUnit([-0.56,0.10,-0.82]), tag:'septal'},
+      {t0:6,  t1:72, amp:1.55*(c.r||1), dir:vAxis(alpha,0.22),         tag:'main'},
+      {t0:54, t1:95, amp:0.16*(c.r||1), dir:vUnit([-0.51,-0.56,0.66]), tag:'terminal'}
+    ],
+    stSeg: 90,
+    tAmp: c.t!==undefined ? c.t : 0.30,
+    tDur: c.peakedT ? 120 : 180,
+    /* The normal T vector points left, inferior and distinctly ANTERIOR --
+       that anterior component is why V2-V4 carry the tallest T waves on the
+       ECG and why the T is inverted in aVR. Too small a value here leaves V2
+       almost T-less, because V2's axis is nearly pure anterior. */
+    tDir: vAxis(alpha-12,-0.45),
+    tPeak: c.peakedT ? 0.5 : 0.62,
+    stVec: [0,0,0],
+    gain: GAIN_QRS,
+    pacerSpike: false
+  };
+
+  const main = tpl.lobes[1], term = tpl.lobes[2];
+
+  if(c.rbbb){
+    /* Right ventricle depolarises late and unopposed: a slow terminal vector
+       pointing right and anterior. That single change produces rSR' in V1 and
+       a wide slurred S in I and V6 — the actual diagnostic pattern. */
+    tpl.qrsDur = 140;
+    main.t1 = 78;
+    term.t0 = 62; term.t1 = 140;
+    term.amp = 0.95*(c.r||1);
+    term.dir = vUnit([-0.78,-0.05,-0.62]);
+    tpl.tDir = vUnit([0.35,0.25,0.75]);       // discordant to terminal forces
+    tpl.tAmp = Math.abs(c.t||0.22);
+  } else if(c.lbbb){
+    /* The LV is activated late and from the right, so the normal left-to-right
+       septal vector disappears (no septal q in I/V6) and the whole beat becomes
+       one broad slurred leftward-posterior sweep. */
+    tpl.qrsDur = 160;
+    tpl.lobes = [
+      {t0:0,  t1:60,  amp:0.35*(c.r||1), dir:vUnit([0.55,0.25,0.30]), tag:'main0'},
+      {t0:30, t1:160, amp:1.70*(c.r||1), dir:vUnit([0.85,0.15,0.50]), tag:'main'}
+    ];
+    tpl.tDir = vUnit([-0.80,-0.15,-0.45]);    // discordant, opposite the sweep
+    tpl.tAmp = Math.abs(c.t||0.26);
+  } else if(c.paced){
+    /* RV apical pacing: wavefront starts at the RV apex and spreads right to
+       left and bottom to top, so it looks like LBBB with a superior axis, and
+       it starts with a pacing artefact. */
+    tpl.qrsDur = 150;
+    tpl.lobes = [
+      {t0:0,  t1:55,  amp:0.30*(c.r||1), dir:vUnit([0.45,-0.42,0.35]), tag:'main0'},
+      {t0:25, t1:150, amp:1.55*(c.r||1), dir:vUnit([0.55,-0.60,0.50]), tag:'main'}
+    ];
+    tpl.tDir = vUnit([-0.55,0.45,-0.50]);     // discordant
+    tpl.tAmp = Math.abs(c.t||0.30);
+    tpl.gain = GAIN_VENT;
+    tpl.pacerSpike = true;
+  } else if(c.vtmorph){
+    /* Ventricular origin: no septal vector, one broad slow front aimed up and
+       to the right (the "northwest" axis that flags VT), with the T opposite. */
+    tpl.qrsDur = 180;
+    tpl.lobes = [
+      {t0:0,  t1:70,  amp:0.40*(c.r||1), dir:vUnit([-0.45,-0.40,-0.30]), tag:'main0'},
+      {t0:30, t1:180, amp:1.65*(c.r||1), dir:vUnit([-0.58,-0.52,-0.30]), tag:'main'}
+    ];
+    tpl.tDir = vUnit([0.55,0.50,0.30]);
+    tpl.tAmp = Math.abs(c.t||0.40);
+    tpl.gain = GAIN_VENT;
+  } else if(wide){
+    /* Non-specific widening (complete heart block escape, hyperK wide QRS):
+       broaden the main vector and let the terminal force drag out. */
+    tpl.qrsDur = Math.max(qrsMs, 140);
+    main.t1 = tpl.qrsDur*0.62;
+    term.t0 = tpl.qrsDur*0.45; term.t1 = tpl.qrsDur;
+    term.amp = 0.40*(c.r||1);
+    if(c.peakedT) tpl.gain = GAIN_VENT;
+  }
+
+  // Injury current: one vector, projected like everything else.
+  if(site && TERRITORY_DIR[site]){
+    tpl.stVec = TERRITORY_DIR[site].map(k => k*0.42);
+  } else if(c.st){
+    /* Diffuse subendocardial ischemia: the injury vector points away from the
+       lateral/inferior leads, which is why they show depression while aVR lifts. */
+    const d = vUnit([-0.80,-0.45,0.35]);
+    tpl.stVec = d.map(k => k*Math.abs(c.st)*1.15);
+  }
+  return tpl;
+}
+
+let _tplCache = null, _tplKey = '';
+function currentTemplate(){
+  const c = RHYTHMS[STATE.rhythm] || RHYTHMS.sinus;
+  const site = stemiSiteEff();
+  const key = STATE.rhythm+'|'+site;
+  if(key !== _tplKey){ _tplCache = buildTemplate(c, site); _tplKey = key; }
+  return _tplCache;
+}
+
+/* Sample one lead at time t (seconds into the beat). Signature is unchanged
+   from the old scalar model, so both 12-lead draw paths call it as before. */
+function leadValue(lead,t){
+  const c = RHYTHMS[STATE.rhythm] || RHYTHMS.sinus;
+  const vec = LEAD_VEC[lead] || LEAD_VEC.II;
+
+  if(c.special==="asys") return (Math.random()-0.5)*0.02;
+  if(c.special==="vf"){
+    const f = vDot(vAxis(55,0.22), vec)*(GAIN_VENT[lead]||1);
+    return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f)*0.9*V_CAL;
+  }
+  if(c.special==="sine"){
+    const hr0=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hr0,20), x=(t%per)/per;
+    const f = vDot(vAxis(55,0.22), vec)*(GAIN_VENT[lead]||1);
+    return (Math.sin(2*Math.PI*x-0.6)*0.42+Math.sin(4*Math.PI*x)*0.05)*f*V_CAL;
+  }
+
+  let hr = STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0) hr=60;
+  const beatLen = 60/hr, tau = (t%beatLen)*1000;   // ms into the beat
+  const tpl = currentTemplate();
+  const g   = tpl.gain[lead]||1;
+  /* P, T and ST are slow, spatially diffuse events, so they get a much
+     smaller precordial proximity boost than the sharp QRS spike does.
+     Using 1.0 here left the precordial T waves undersized and flattened
+     hyperkalaemia's peaked T — the whole point of those rhythms. */
+  const gST = GAIN_ST[lead]||1;
+  const pr  = tpl.pr;
+  let v = 0;
+
+  // P wave
+  if(tpl.pAmp){
+    const p0 = pr - tpl.pDur;
+    if(tau>p0 && tau<p0+tpl.pDur)
+      v += vAsym((tau-p0)/tpl.pDur,0.5)*tpl.pAmp*vDot(tpl.pDir,vec)*gST;
+  }
+  // Pacing artefact — a narrow bipolar spike just before the QRS
+  if(tpl.pacerSpike){
+    const s = pr - 16;
+    if(tau>s && tau<s+20) v += (1-Math.abs((tau-s)/20-0.5)*2)*0.75*Math.sign(vDot(tpl.lobes[1].dir,vec)||1);
+  }
+  // QRS: sum the lobes, each projected onto this lead
+  for(let i=0;i<tpl.lobes.length;i++){
+    const lo = tpl.lobes[i];
+    const a = pr+lo.t0, b = pr+lo.t1;
+    if(tau>a && tau<b) v += vBump((tau-a)/(b-a))*lo.amp*vDot(lo.dir,vec)*g;
+  }
+
+  const qrsEnd = pr + tpl.qrsDur;
+  const tStart = qrsEnd + tpl.stSeg;
+  const tEnd   = tStart + tpl.tDur;
+
+  // T wave
+  if(tau>tStart && tau<tEnd)
+    v += vAsym((tau-tStart)/(tpl.tDur),tpl.tPeak)*tpl.tAmp*vDot(tpl.tDir,vec)*gST;
+
+  // Injury current: a standing offset that builds through the QRS, holds
+  // across the ST segment, and merges into the T rather than dipping back.
+  const stP = vDot(tpl.stVec,vec)*gST;
+  if(stP){
+    let env = 0;
+    if(tau>pr && tau<=qrsEnd)      env = sm01((tau-pr)/tpl.qrsDur);
+    else if(tau>qrsEnd && tau<=tStart) env = 1;
+    else if(tau>tStart && tau<tEnd)    env = 1-sm01((tau-tStart)/tpl.tDur*0.9);
+    if(env>0){
+      v += stP*env;
+      // Hyperacute T: the injury also fattens the T in the same direction.
+      if(tau>tStart && tau<tEnd)
+        v += vAsym((tau-tStart)/tpl.tDur,0.55)*stP*0.55;
+    }
+  }
+  return v*V_CAL;
+}
+
 function stemiSiteEff(){   // the site drives the 12-lead; STEMI rhythm w/o a site defaults to anterior
   let s=STATE.stemiSite;
   if((!s||s==="none") && STATE.rhythm==="stemi") s="anterior";
   return (s&&s!=="none")? s : null;
-}
-function leadST(lead){
-  const s=stemiSiteEff();
-  if(s) return (STEMI_ST[s]||{})[lead]||0;
-  if(STATE.rhythm==="ischemia") return ({I:-0.08,II:-0.10,aVL:-0.08,V4:-0.12,V5:-0.12,V6:-0.10})[lead]||0;
-  return 0;
-}
-function leadValue(lead,t){
-  const c=RHYTHMS[STATE.rhythm]||RHYTHMS.sinus, f=LEADF[lead]||0.6;
-  if(c.special==="asys") return (Math.random()-0.5)*0.02;
-  if(c.special==="vf") return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f);
-  if(c.special==="sine"){ const hr0=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hr0,20), x=(t%per)/per;
-    return (Math.sin(2*Math.PI*x-0.6)*0.42+Math.sin(4*Math.PI*x)*0.05)*f; }
-  let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
-  const beatLen=60/hr, tau=t%beatLen; let v=0;
-  const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
-  if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);
-  const pr=c.pr||0.16, wide=c.wide?1.9:1;
-  const st=leadST(lead);
-  v+=gauss(tau,pr-0.015,0.012*wide,-0.10*f);                          // q
-  v+=gauss(tau,pr+0.01,0.016*wide,c.r*f);                             // R
-  v+=gauss(tau,pr+0.05,0.018*wide, st>0 ? -0.05*Math.abs(f) : -0.30*f*0.5); // S (shallow when elevated)
-  const tC=pr+0.30;
-  if(st>0){
-    // Coved, convex ST elevation that takes off from the J-point and merges into a
-    // hyperacute T with no dip back to baseline — the classic STEMI "tombstone".
-    const jp=pr+0.05, tEnd=pr+0.50;
-    const onset  = sm01((tau-(pr-0.005))/0.05);          // ramps in as the R descends (smooth J-point)
-    const offset = 1-sm01((tau-(tEnd-0.13))/0.13);       // eases back to baseline after the T
-    const win    = Math.max(0, Math.min(1,onset))*Math.max(0,offset);
-    const u      = Math.min(1,Math.max(0,(tau-jp)/(tEnd-jp)));
-    const stBase = st*(1-0.5*u);                         // elevated J-point, gentle convex downslope
-    const dome   = gauss(tau, pr+0.30, 0.115, st*0.55+0.32); // broad hyperacute T / coved dome
-    v += win*(stBase+dome);
-  } else {
-    if(st<0){                                            // smooth, down-sloping reciprocal / ischemic depression
-      const a=pr+0.06;
-      if(tau>a && tau<tC){ const u=(tau-a)/(tC-a); const w=u<0.25?sm01(u/0.25):1; v+=st*w*(0.75+0.5*u); }
-    }
-    v+=gauss(tau,tC, c.peakedT?0.033:0.06, c.t*f*(c.peakedT?0.95:0.6));  // hyperK: tall, narrow, tented T
-  }
-  return v;
 }
 function renderTwelveLead(){
   const ov=document.getElementById("twelve"); ov.classList.add("show");
