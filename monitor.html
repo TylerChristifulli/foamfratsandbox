@@ -798,7 +798,13 @@
         <button class="startbtn" id="acq12">📈 Acquire 12-Lead</button>
         <button class="cyclebtn" id="close12">✕ Close 12-Lead</button>
       </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Pick a STEMI site (or None for a normal 12-lead), then Acquire — the 12-lead shows ST elevation in the matching leads and pops up on the monitor. Works with any underlying rhythm.</div>
+      <div class="trendrow" style="margin-top:8px">
+        <label style="flex:1">12-lead case
+          <select id="ecgCase" class="sel"><option value="">Follow the monitor rhythm</option></select>
+        </label>
+      </div>
+      <div id="ecgCaseHint" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Leave the case on <b>Follow the monitor rhythm</b> and the 12-lead is derived from whatever rhythm is running, with the STEMI site above. Pick a specific case and it renders from the full 12-Lead Generator engine — de Winter, Wellens, fascicular blocks, pacing modes, tox and electrolyte patterns — and the monitor rhythm follows to match where it can.</div>
     </div>
 
     <div class="box">
@@ -911,6 +917,15 @@
   </div>
 </div>
 
+<!-- 12-Lead Generator engine (twelve-lead/, MIT). DOM-free layers only:
+     leads = geometry, morphology = beat templates, rhythm = beat scheduling,
+     generator = sampling, catalog = the 85 preset cases. Loading these instead
+     of reimplementing them keeps the monitor and the generator in lockstep. -->
+<script src="twelve-lead/assets/js/leads.js"></script>
+<script src="twelve-lead/assets/js/morphology.js"></script>
+<script src="twelve-lead/assets/js/rhythm.js"></script>
+<script src="twelve-lead/assets/js/generator.js"></script>
+<script src="twelve-lead/assets/js/catalog.js"></script>
 <script>
 /* =========================================================================
    FoamFrat Sim Monitor — single file. Roles: monitor (iPad) / control (laptop)
@@ -929,7 +944,7 @@ const STATE = {
   // transcutaneous pacing
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
-  stemiSite:"none", ecg12Seq:0, twelveCloseSeq:0, blankSeq:0,
+  stemiSite:"none", ecgCase:"", ecg12Seq:0, twelveCloseSeq:0, blankSeq:0,
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
@@ -1565,6 +1580,7 @@ function runMonitor(){
   { const mc=document.getElementById("mCtrls"); if(mc) mc.onclick=()=>document.getElementById("monitor").classList.toggle("showdev"); }
   document.getElementById("tvClose").onclick=()=>document.getElementById("twelve").classList.remove("show");
 
+
   // fullscreen toggle (works on desktop & iPad Safari that support the Fullscreen API)
   document.getElementById("mFull").onclick=()=>{
     const el=document.documentElement, d=document;
@@ -1979,10 +1995,133 @@ function stemiSiteEff(){   // the site drives the 12-lead; STEMI rhythm w/o a si
   if((!s||s==="none") && STATE.rhythm==="stemi") s="anterior";
   return (s&&s!=="none")? s : null;
 }
+/* =========================================================================
+   ENGINE-BACKED 12-LEAD — when a specific case is selected, the tracing is
+   produced by the 12-Lead Generator engine (twelve-lead/) rather than the
+   monitor's own vector model. Same physiology as the standalone tool, drawn
+   on the monitor's own canvas so it still looks like this device.
+   ========================================================================= */
+function ekgReady(){
+  return typeof window.EKG === "object" && EKG.generator && EKG.catalog && EKG.morphology;
+}
+function ekgPreset(label){
+  if(!ekgReady() || !label) return null;
+  var P = EKG.catalog.PRESETS || [];
+  for(var i=0;i<P.length;i++) if(P[i].label===label) return P[i];
+  return null;
+}
+function ekgConfigFor(label){
+  var p = ekgPreset(label); if(!p) return null;
+  var cfg = (typeof EKG.catalog.fromPreset === "function")
+    ? EKG.catalog.fromPreset(p)
+    : Object.assign({}, EKG.catalog.DEFAULTS||{}, p.cfg||{});
+  /* Honour the instructor's rate if they have moved it off the preset's own. */
+  if(STATE.hr>0 && !p.lockRate) cfg.rate = STATE.hr;
+  return cfg;
+}
+
+/* Cache: generating 12 leads x 5000 samples is cheap but not free, and the
+   overlay re-renders on every state push. */
+var _genCache=null, _genKey="";
+function ekgGenerate(label){
+  var cfg = ekgConfigFor(label); if(!cfg) return null;
+  var key = label+"|"+cfg.rate;
+  if(key!==_genKey){
+    try{ _genCache = EKG.generator.generate(cfg); _genKey = key; }
+    catch(e){ console.warn("12-lead engine failed, falling back to the derived model:", e); return null; }
+  }
+  return _genCache;
+}
+
+/* "Pattern wins, rhythm follows": map a generator case onto the nearest rhythm
+   this monitor can actually display, so the live strip and the 12-lead tell the
+   same story. Returns null when nothing sensible maps and the rhythm is left be. */
+function monitorRhythmFor(cfg){
+  if(!cfg) return null;
+  if(cfg.pacing && cfg.pacing!=="none") return "paced";
+  switch(cfg.rhythm){
+    case "vfib": case "polymorphic_vt": return "vfib";
+    case "vtach": return "vt";
+    case "asystole": return "asystole";
+    case "afib": case "aflutter": case "mat": case "wandering": return "afib";
+    case "svt": case "atach": case "junctional_tach": return "svt";
+    case "junctional": case "accel_junctional": return "junctional";
+    case "idioventricular": case "aivr": return "avb3";
+    case "sinus_brady": return "sinus_brady";
+    case "sinus_tach": return "sinus_tach";
+  }
+  if(cfg.pattern==="hyperk_severe")   return "hyperk_sine";
+  if(cfg.pattern==="hyperk_moderate") return "hyperk_wide";
+  if(cfg.pattern==="hyperk_mild")     return "hyperk_t";
+  if(cfg.avblock==="third")            return "avb3";
+  if(cfg.avblock==="mobitz1")          return "avb2_1";
+  if(cfg.avblock==="mobitz2"||cfg.avblock==="twotoone") return "avb2_2";
+  if(cfg.avblock==="first")            return "avb1";
+  if(cfg.ivcd==="rbbb")                return "rbbb";
+  if(cfg.ivcd==="lbbb")                return "lbbb";
+  if(cfg.ectopy && /^(pvc|bigeminy|trigeminy|couplet|nsvt)/.test(cfg.ectopy)) return "pvc";
+  if(cfg.ectopy==="pac")               return "pac";
+  if(cfg.ischemia && cfg.ischemia!=="none" && cfg.stage!=="old") return "ischemia";
+  return "sinus";
+}
+
+/* A real 12-lead page is four sequential 2.5 s windows, not the same beat
+   copied across the row. Column 1 is 0-2.5 s, column 2 is 2.5-5 s, and so on. */
+function drawEngine12(ctx, res, W, H, dpr){
+  var cols=4, rows=3, stripH=H*0.20, gridH=H-stripH, cw=W/cols, ch=gridH/rows;
+  var AMP = 0.19;   // cell-height fraction per mV (calibrated across all 85 presets)
+  ctx.lineJoin="round"; ctx.lineCap="round"; ctx.font="bold "+(13*dpr)+"px sans-serif";
+  function cell(lead,x0,y0,w,h,t0,t1){
+    var data=res.leads[lead]; if(!data) return;
+    var baseY=y0+h*0.55, amp=h*AMP, lo=y0+2*dpr, hi=y0+h-2*dpr;
+    ctx.fillStyle="#000"; ctx.fillText(lead, x0+7*dpr, y0+18*dpr);
+    ctx.strokeStyle="#000"; ctx.lineWidth=1.6*dpr; ctx.beginPath();
+    for(var px=0;px<=w;px++){
+      var t=t0+(t1-t0)*(px/w), idx=Math.round(t*res.fs);
+      if(idx<0)idx=0; if(idx>=data.length)idx=data.length-1;
+      var yy=baseY-data[idx]*amp;
+      if(yy<lo)yy=lo; if(yy>hi)yy=hi;             // clip like a real recorder
+      if(px===0)ctx.moveTo(x0+px,yy); else ctx.lineTo(x0+px,yy);
+    }
+    ctx.stroke();
+    // column separator, the way a printed 12-lead segments its columns
+    if(x0>1){ ctx.strokeStyle="rgba(0,0,0,.25)"; ctx.lineWidth=1*dpr;
+      ctx.beginPath(); ctx.moveTo(x0, y0+h*0.18); ctx.lineTo(x0, y0+h*0.92); ctx.stroke(); }
+  }
+  for(var r=0;r<rows;r++) for(var c=0;c<cols;c++)
+    cell(LEAD12[r][c], c*cw, r*ch, cw, ch, c*2.5, (c+1)*2.5);
+  // rhythm strip: lead II, the whole 10 s page
+  var d=res.leads["II"];
+  if(d){
+    var baseY=gridH+stripH*0.55, amp=stripH*AMP, lo=gridH+2*dpr, hi=gridH+stripH-2*dpr;
+    ctx.fillStyle="#000"; ctx.fillText("II", 7*dpr, gridH+18*dpr);
+    ctx.strokeStyle="#000"; ctx.lineWidth=1.6*dpr; ctx.beginPath();
+    for(var px=0;px<=W;px++){
+      var idx=Math.round((px/W)*res.duration*res.fs); if(idx>=d.length)idx=d.length-1;
+      var yy=baseY-d[idx]*amp; if(yy<lo)yy=lo; if(yy>hi)yy=hi;
+      if(px===0)ctx.moveTo(px,yy); else ctx.lineTo(px,yy);
+    }
+    ctx.stroke();
+  }
+}
+
 function renderTwelveLead(){
   const ov=document.getElementById("twelve"); ov.classList.add("show");
-  let lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus";
-  const sEff=stemiSiteEff(); if(sEff) lab+=" — "+sEff.toUpperCase()+" STEMI";
+  const engRes = STATE.ecgCase ? ekgGenerate(STATE.ecgCase) : null;
+  let lab;
+  if(engRes){
+    lab = STATE.ecgCase;
+    const m = engRes.measurements||{};
+    const bits=[];
+    if(m.pr)  bits.push("PR "+m.pr);
+    if(m.qrs) bits.push("QRS "+m.qrs);
+    if(m.qtc) bits.push("QTc "+m.qtc);
+    if(m.qrsAxis!==undefined) bits.push("axis "+m.qrsAxis+"\u00b0");
+    if(bits.length) lab += "   " + bits.join(" · ");
+  } else {
+    lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus";
+    const sEff=stemiSiteEff(); if(sEff) lab+=" — "+sEff.toUpperCase()+" STEMI";
+  }
   document.getElementById("tvInfo").textContent=new Date().toLocaleString()+"   HR "+(STATE.rhythm==="asystole"?0:STATE.hr)+"   "+lab;
   const cv=document.getElementById("cTwelve"), ctx=cv.getContext("2d"), dpr=devicePixelRatio;
   const r=cv.getBoundingClientRect(), W=cv.width=r.width*dpr, H=cv.height=r.height*dpr;
@@ -2003,6 +2142,7 @@ function renderTwelveLead(){
     for(let px=0;px<=w;px++){ const yy=baseY-leadValue(lead,px/pps)*amp; if(px===0)ctx.moveTo(x0+px,yy); else ctx.lineTo(x0+px,yy); }
     ctx.stroke();
   }
+  if(engRes){ drawEngine12(ctx, engRes, W, H, dpr); return; }
   for(let rI=0;rI<rows;rI++) for(let cI=0;cI<cols;cI++) drawLead(LEAD12[rI][cI], cI*cw, rI*ch, cw, ch, 2.5);
   drawLead("II", 0, gridH, W, stripH, 10);   // rhythm strip
 }
@@ -2422,6 +2562,49 @@ function runControl(){
   siteSel.onchange=e=>{ STATE.stemiSite=e.target.value; push("STEMI site "+STATE.stemiSite); };
   document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); track("twelve_lead", STATE.stemiSite||"normal"); };
   document.getElementById("close12").onclick=()=>{ STATE.twelveCloseSeq=(STATE.twelveCloseSeq||0)+1; push("12-lead closed"); };
+  /* ---- 12-lead case picker, built from the generator's own catalog ---- */
+  (function initEcgCases(){
+    const sel=document.getElementById("ecgCase"); if(!sel) return;
+    if(!ekgReady()){
+      sel.insertAdjacentHTML("beforeend",'<option value="" disabled>(generator engine not loaded)</option>');
+      return;
+    }
+    const byCat={}, order=[];
+    (EKG.catalog.PRESETS||[]).forEach(p=>{
+      const c=p.category||"Other";
+      if(!byCat[c]){ byCat[c]=[]; order.push(c); }
+      byCat[c].push(p);
+    });
+    order.forEach(cat=>{
+      const g=document.createElement("optgroup"); g.label=cat;
+      byCat[cat].forEach(p=>{
+        const o=document.createElement("option"); o.value=p.label; o.textContent=p.label; g.appendChild(o);
+      });
+      sel.appendChild(g);
+    });
+    function showHint(){
+      const h=document.getElementById("ecgCaseHint"); if(!h) return;
+      const p=ekgPreset(STATE.ecgCase);
+      h.innerHTML = p&&p.teaching ? "<b>Teaching point.</b> "+p.teaching : "";
+    }
+    sel.onchange=()=>{
+      STATE.ecgCase=sel.value;
+      const cfg=ekgConfigFor(sel.value);
+      if(cfg){
+        // Pattern wins; bring the running rhythm along where it maps.
+        const rk=monitorRhythmFor(cfg);
+        if(rk && RHYTHMS[rk]) STATE.rhythm=rk;
+        if(cfg.rate) STATE.hr=cfg.rate;
+        if(cfg.ischemia && /^(septal|anterior|anteroseptal|extensive_anterior|anterolateral)$/.test(cfg.ischemia)) STATE.stemiSite="anterior";
+        else if(cfg.ischemia && /^(lateral|high_lateral)$/.test(cfg.ischemia)) STATE.stemiSite="lateral";
+        else if(cfg.ischemia && /^inferior/.test(cfg.ischemia)) STATE.stemiSite="inferior";
+      }
+      showHint();
+      push(sel.value ? "12-lead case: "+sel.value : "12-lead case: follow rhythm");
+    };
+    onState.push(()=>{ if(sel.value!==(STATE.ecgCase||"")) sel.value=STATE.ecgCase||""; showHint(); });
+    showHint();
+  })();
 
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
