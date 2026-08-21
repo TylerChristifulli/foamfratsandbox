@@ -374,10 +374,18 @@
   .connpill{margin-left:auto;font-size:12px;color:var(--dim);}
   .connpill.on{color:var(--ecg);}
   .cyclebtn{background:#13243a;border:1px solid #25496e;color:#bfe2ff;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;}
-  .sel{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;padding:8px;font-size:13px;}
+  .sel{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;padding:8px;font-size:13px;
+    max-width:100%;box-sizing:border-box;}
   .numin{width:66px;background:#1a1a1a;border:1px solid #2e2e2e;color:#fff;border-radius:6px;padding:6px;font-size:13px;}
   .trendrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
-  .trendrow label{font-size:13px;color:var(--dim);}
+  .trendrow label{font-size:13px;color:var(--dim);min-width:0;}
+  /* A control whose options are long (the 12-lead case list) gets its own full-width
+     row: label above, select filling the panel and truncating inside its own box
+     rather than overflowing the panel and being clipped off-screen. */
+  .fullrow{margin-top:8px;}
+  .fullrow label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px;}
+  .fullrow .sel{display:block;width:100%;max-width:100%;box-sizing:border-box;
+    text-overflow:ellipsis;}
   .startbtn{background:#0c2a12;border:1px solid #194d24;color:#b6f5c4;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;}
   .energy{display:flex;flex-wrap:wrap;gap:6px;}
   .energy button{background:#1a1a1a;border:1px solid #2e2e2e;color:#ddd;border-radius:8px;padding:7px 9px;font-size:12.5px;}
@@ -798,10 +806,9 @@
         <button class="startbtn" id="acq12">📈 Acquire 12-Lead</button>
         <button class="cyclebtn" id="close12">✕ Close 12-Lead</button>
       </div>
-      <div class="trendrow" style="margin-top:8px">
-        <label style="flex:1">12-lead case
-          <select id="ecgCase" class="sel"><option value="">Follow the monitor rhythm</option></select>
-        </label>
+      <div class="fullrow">
+        <label for="ecgCase">12-lead case</label>
+        <select id="ecgCase" class="sel"><option value="">Follow the monitor rhythm</option></select>
       </div>
       <div id="ecgCaseHint" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
       <div style="font-size:11px;color:var(--dim);margin-top:6px">Leave the case on <b>Follow the monitor rhythm</b> and the 12-lead is derived from whatever rhythm is running, with the STEMI site above. Pick a specific case and it renders from the full 12-Lead Generator engine — de Winter, Wellens, fascicular blocks, pacing modes, tox and electrolyte patterns — and the monitor rhythm follows to match where it can.</div>
@@ -2578,7 +2585,8 @@ function runControl(){
     order.forEach(cat=>{
       const g=document.createElement("optgroup"); g.label=cat;
       byCat[cat].forEach(p=>{
-        const o=document.createElement("option"); o.value=p.label; o.textContent=p.label; g.appendChild(o);
+        const o=document.createElement("option"); o.value=p.label; o.textContent=p.label;
+        o.title=p.label; g.appendChild(o);
       });
       sel.appendChild(g);
     });
