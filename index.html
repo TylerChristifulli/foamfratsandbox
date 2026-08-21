@@ -328,6 +328,25 @@ animation:hb 1.05s ease-in-out infinite;
 /* sim monitor multi-trace */
 .pleth-path{fill:none;stroke:var(--amber);stroke-width:2.2;filter:drop-shadow(0 0 5px var(--amber));stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:trace 3.4s linear infinite}
 
+/* 12-lead generator mini grid */
+.tl-grid .lead{
+fill:none;stroke:var(--green);stroke-width:1.7;
+stroke-linecap:round;stroke-linejoin:round;
+filter:drop-shadow(0 0 4px var(--green));
+stroke-dasharray:220;stroke-dashoffset:220;
+animation:trace12 3.6s linear infinite;
+}
+.tl-grid .lead.inj{stroke:#ff5a5f;filter:drop-shadow(0 0 5px #ff5a5f)}
+.tl-grid .lead.dep{stroke:var(--cyan);filter:drop-shadow(0 0 4px var(--cyan))}
+.tl-grid .lbl{font-family:"VT323",monospace;font-size:14px;fill:var(--dim);opacity:.75}
+@keyframes trace12{
+0%{stroke-dashoffset:220}
+70%,100%{stroke-dashoffset:0}
+}
+@media(prefers-reduced-motion:reduce){
+.tl-grid .lead{animation:none;stroke-dashoffset:0}
+}
+
 /* dispatch code trainer */
 .dcode{font-family:"Press Start 2P",monospace;font-size:38px;fill:var(--amber);filter:drop-shadow(0 0 10px rgba(255,214,10,.8))}
 .dcode-a{animation:codeA 3.2s steps(1) infinite}
@@ -417,6 +436,50 @@ L540,90 L560,90 L600,90" />
 <span class="badge">1 PLAYER</span>
 </div>
 <a class="play" href="reentry.html">PLAY ►</a>
+</div>
+
+<!-- 12-Lead Generator cabinet
+     Source: arpitre/12-Lead-Generator by Armand Pitre (MIT). Vendored under twelve-lead/. -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px #ff5a5f,0 0 22px #ff5a5f;border-color:rgba(255,90,95,.5)">12-LEAD GEN</div>
+<div class="screen">
+<span class="scr-label" style="color:#ff5a5f;text-shadow:0 0 8px #ff5a5f;font-size:15px">INFERIOR STEMI</span>
+<span class="scr-bpm" style="top:8px;bottom:auto;font-size:15px">III &gt; II</span>
+<svg class="tl-grid" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+<text class="lbl" x="8" y="51">I</text>
+<path class="lead dep" style="animation-delay:0.00s" d="M36,46 L51,46 Q57,42 63,46 L70,46 L74,40 L78,56 L83,32 L89,53 C96,55 104,54 112,46 L128,46" />
+<text class="lbl" x="156" y="51">aVR</text>
+<path class="lead" style="animation-delay:0.16s" d="M184,46 L199,46 Q205,42 211,46 L218,46 L222,40 L226,56 L231,31 L237,52 L242,46 Q250,38 257,46 L276,46" />
+<text class="lbl" x="304" y="51">V1</text>
+<path class="lead" style="animation-delay:0.32s" d="M332,46 L347,46 Q353,42 359,46 L366,46 L370,40 L374,56 L379,31 L385,52 L390,46 Q398,38 405,46 L424,46" />
+<text class="lbl" x="452" y="51">V4</text>
+<path class="lead" style="animation-delay:0.48s" d="M480,46 L495,46 Q501,42 507,46 L514,46 L518,40 L522,56 L527,31 L533,52 L538,46 Q546,38 553,46 L572,46" />
+<text class="lbl" x="8" y="99">II</text>
+<path class="lead inj" style="animation-delay:0.05s" d="M36,94 L51,94 Q57,90 63,94 L70,94 L74,90 L78,101 L83,77 L89,85 C96,79 106,80 114,94 L128,94" />
+<text class="lbl" x="156" y="99">aVL</text>
+<path class="lead dep" style="animation-delay:0.21s" d="M184,94 L199,94 Q205,90 211,94 L218,94 L222,88 L226,104 L231,80 L237,101 C244,103 252,102 260,94 L276,94" />
+<text class="lbl" x="304" y="99">V2</text>
+<path class="lead" style="animation-delay:0.37s" d="M332,94 L347,94 Q353,90 359,94 L366,94 L370,88 L374,104 L379,79 L385,100 L390,94 Q398,86 405,94 L424,94" />
+<text class="lbl" x="452" y="99">V5</text>
+<path class="lead" style="animation-delay:0.53s" d="M480,94 L495,94 Q501,90 507,94 L514,94 L518,88 L522,104 L527,79 L533,100 L538,94 Q546,86 553,94 L572,94" />
+<text class="lbl" x="8" y="147">III</text>
+<path class="lead inj" style="animation-delay:0.10s" d="M36,142 L51,142 Q57,138 63,142 L70,142 L74,138 L78,149 L83,125 L89,133 C96,127 106,128 114,142 L128,142" />
+<text class="lbl" x="156" y="147">aVF</text>
+<path class="lead inj" style="animation-delay:0.26s" d="M184,142 L199,142 Q205,138 211,142 L218,142 L222,138 L226,149 L231,125 L237,133 C244,127 254,128 262,142 L276,142" />
+<text class="lbl" x="304" y="147">V3</text>
+<path class="lead" style="animation-delay:0.42s" d="M332,142 L347,142 Q353,138 359,142 L366,142 L370,136 L374,152 L379,127 L385,148 L390,142 Q398,134 405,142 L424,142" />
+<text class="lbl" x="452" y="147">V6</text>
+<path class="lead" style="animation-delay:0.58s" d="M480,142 L495,142 Q501,138 507,142 L514,142 L518,136 L522,152 L527,127 L533,148 L538,142 Q546,134 553,142 L572,142" />
+</svg>
+</div>
+<h2 class="cab-title">12-Lead Generator</h2>
+<p class="cab-sub">Build a tracing &middot; blind the student &middot; reveal the why</p>
+<div class="badges">
+<span class="badge on">2 PLAYER</span>
+<span class="badge on">85 CASES</span>
+<span class="badge on">BLIND MODE</span>
+</div>
+<a class="play" href="twelve-lead/">PLAY &#9658;</a>
 </div>
 
 <!-- Sim Monitor cabinet -->
