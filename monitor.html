@@ -1005,11 +1005,97 @@ const BROKERS=[
 ];
 let mqttPool=[], bc=null;
 const onState=[], onSignal=[], seenSignals=[];
-function anyConnected(){ return mqttPool.some(c=>c&&c.connected); }
+
+/* =========================================================================
+   PORT-443 FALLBACK TRANSPORT (Supabase Realtime)
+
+   The three MQTT brokers above all listen on non-standard ports (8084, 8884,
+   8081). Hospital, agency, school and guest Wi-Fi commonly permit only 80 and
+   443 outbound, which blocks all three at once — so "several brokers for
+   resilience" gave no real diversity against a port block, and those networks
+   saw nothing but "can't reach sync server".
+
+   This adds a transport on 443, the one port such networks always allow. It
+   speaks the Phoenix channel protocol over a plain WebSocket, so it needs no
+   extra library and no new service — the project already talks to Supabase.
+   ========================================================================= */
+const SB_WS = SUPA_URL.replace("https://","wss://")+"/realtime/v1/websocket?apikey="+encodeURIComponent(SUPA_KEY)+"&vsn=1.0.0";
+const SB_TOPIC = () => "realtime:foamfrat-"+ROOM;
+let sbSock=null, sbJoined=false, sbRef=0, sbHeart=null, sbRetry=0, sbTimer=null;
+
+function sbReady(){ return !!(sbSock && sbSock.readyState===1 && sbJoined); }
+
+function sbSendRaw(obj){
+  if(!sbSock || sbSock.readyState!==1) return false;
+  try{ sbSock.send(JSON.stringify(obj)); return true; }catch(e){ return false; }
+}
+/* kind "state" carries the STATE object; "sig" carries WebRTC signalling —
+   the same split the two MQTT topics use. */
+function sbSend(kind, text){
+  if(!sbReady()) return false;
+  return sbSendRaw({topic:SB_TOPIC(), event:"broadcast", ref:String(++sbRef),
+    payload:{type:"broadcast", event:kind, payload:{d:text, from:CLIENTID}}});
+}
+
+function sbConnect(){
+  if(sbSock){ try{ sbSock.close(); }catch(e){} }
+  sbJoined=false;
+  try{ sbSock=new WebSocket(SB_WS); }catch(e){ sbSock=null; return; }
+
+  sbSock.onopen=()=>{
+    sbRetry=0;
+    /* self:false — we never want our own message echoed back, the same reason
+       the MQTT path tags every payload with __src. */
+    sbSendRaw({topic:SB_TOPIC(), event:"phx_join", ref:String(++sbRef),
+      payload:{config:{broadcast:{self:false, ack:false}, presence:{key:CLIENTID}}}});
+    clearInterval(sbHeart);
+    sbHeart=setInterval(()=>sbSendRaw({topic:"phoenix", event:"heartbeat", payload:{}, ref:String(++sbRef)}), 25000);
+  };
+
+  sbSock.onmessage=(e)=>{
+    let m; try{ m=JSON.parse(e.data); }catch(_){ return; }
+    if(m.event==="phx_reply" && m.payload && m.payload.status==="ok" && !sbJoined){
+      sbJoined=true; setConn(true);
+      /* MQTT published state with retain:true, so a monitor joining late was
+         handed the current state automatically. Broadcast has no retain, so a
+         joiner asks for it instead and whoever holds it answers. */
+      if(ROLE==="control") broadcast(); else sbSend("hello", CLIENTID);
+      return;
+    }
+    if(m.event!=="broadcast" || !m.payload) return;
+    const kind=m.payload.event, body=m.payload.payload;
+    if(!body || body.from===CLIENTID) return;
+    if(kind==="hello"){ if(ROLE==="control") broadcast(); return; }
+    if(kind==="state"){
+      try{ const obj=JSON.parse(body.d); if(obj.__src===CLIENTID) return; applyState(obj); }catch(_){}
+    } else if(kind==="sig"){
+      try{ const sg=JSON.parse(body.d);
+        if(sg.from===CLIENTID) return;
+        if(sg.sid){ if(seenSignals.indexOf(sg.sid)>=0) return; seenSignals.push(sg.sid);
+                    if(seenSignals.length>256) seenSignals.shift(); }
+        onSignal.forEach(f=>f(sg)); }catch(_){}
+    }
+  };
+
+  const retry=()=>{
+    sbJoined=false; clearInterval(sbHeart); setConn(anyConnected());
+    clearTimeout(sbTimer);
+    const wait=Math.min(30000, 2000*Math.pow(2, Math.min(sbRetry++,4)));   // 2s→32s backoff
+    sbTimer=setTimeout(sbConnect, wait);
+  };
+  sbSock.onclose=retry;
+  sbSock.onerror=()=>{ try{ sbSock.close(); }catch(e){} };
+}
+
+/* A broker can report connected while its subscribe is being refused — EMQX
+   does exactly that intermittently. Only count a link once its SUBACK lands,
+   otherwise the status pill claims sync is working when nothing flows. */
+function anyConnected(){ return mqttPool.some(c=>c&&c.connected&&c.__ffSubOk) || sbReady(); }
 
 function broadcast(){
   const payload=JSON.stringify(Object.assign({__src:CLIENTID}, STATE));  // tag sender so we can ignore our own echo
   mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(TOPIC(),payload,{retain:true}); }catch(e){} });
+  sbSend("state", payload);        // port-443 path — the only one that works on port-restricted Wi-Fi
   try{ if(bc) bc.postMessage(payload); }catch(e){}
   // push straight into the embedded Control-Room preview iframe (same-origin, always reliable)
   try{ const pf=document.getElementById("pvIframe"); if(pf&&pf.contentWindow) pf.contentWindow.postMessage({__ffstate:payload},location.origin); }catch(e){}
@@ -1020,6 +1106,7 @@ function sendSignal(obj){
   obj.from=CLIENTID; obj.sid=Math.random().toString(16).slice(2,10);
   const s=JSON.stringify(obj);
   mqttPool.forEach(c=>{ try{ if(c&&c.connected) c.publish(RTOPIC(),s); }catch(e){} });
+  sbSend("sig", s);
 }
 
 function connect(){
@@ -1037,7 +1124,9 @@ function connect(){
     mqttPool[i]=c;
     c.on("connect",()=>{
       setConn(true);
-      try{ c.subscribe(TOPIC()); c.subscribe(RTOPIC()); }catch(e){}
+      c.__ffSubOk=false;
+      try{ c.subscribe([TOPIC(),RTOPIC()],(err)=>{ c.__ffSubOk=!err; setConn(anyConnected()); }); }
+      catch(e){ c.__ffSubOk=false; }
       if(ROLE==="control") broadcast();          // push current state to monitor
     });
     c.on("reconnect",()=>setConn(anyConnected()));
@@ -1055,10 +1144,12 @@ function connect(){
       }
     });
   });
+  sbConnect();                                  // port-443 path, for networks that block the broker ports
   setConn(false);
   // if nothing connects, say so plainly instead of an endless "connecting…"
   setTimeout(()=>{ if(!anyConnected()){ const p=document.getElementById("cConn");
-    if(p){ p.textContent="⚠ can't reach sync server — check Wi-Fi / firewall, then reload"; p.classList.remove("on"); } } }, 13000);
+    if(p){ p.textContent="⚠ can't reach sync server — this network is blocking it. Try cellular / a hotspot, then reload";
+           p.classList.remove("on"); } } }, 13000);
 }
 function setConn(ok){
   ok=!!ok||anyConnected();
