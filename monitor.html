@@ -2976,9 +2976,50 @@ function runMobileMonitor(){
       ctx.fillStyle="#000"; ctx.fillText(lead,x0+6*dpr,y0+15*dpr);
       ctx.strokeStyle="#000"; ctx.lineWidth=1.5*dpr; ctx.beginPath();
       for(let px=0;px<=w;px++){ const yy=baseY-leadValue(lead,px/pps)*amp; if(px===0)ctx.moveTo(x0+px,yy); else ctx.lineTo(x0+px,yy); } ctx.stroke(); }
-    if(W>H){ const cols=4,rows=3,cw=W/cols,ch=(H*0.8)/rows; for(let ri=0;ri<rows;ri++)for(let ci=0;ci<cols;ci++)drawLead(LEAD12[ri][ci],ci*cw,ri*ch,cw,ch,2.5); drawLead("II",0,H*0.8,W,H*0.2,10); }
+    /* Honour a selected generator case here as well, so the phone view and the
+       main monitor never show two different tracings for the same scenario. */
+    const mEng = STATE.ecgCase ? ekgGenerate(STATE.ecgCase) : null;
+    if(mEng){
+      const AMP=0.19;
+      function engCell(lead,x0,y0,w,h,t0,t1){
+        const data=mEng.leads[lead]; if(!data) return;
+        const baseY=y0+h*0.56, amp=h*AMP, lo=y0+2*dpr, hi=y0+h-2*dpr;
+        ctx.fillStyle="#000"; ctx.fillText(lead,x0+6*dpr,y0+15*dpr);
+        ctx.strokeStyle="#000"; ctx.lineWidth=1.5*dpr; ctx.beginPath();
+        for(let px=0;px<=w;px++){
+          const t=t0+(t1-t0)*(px/w); let idx=Math.round(t*mEng.fs);
+          if(idx<0)idx=0; if(idx>=data.length)idx=data.length-1;
+          let yy=baseY-data[idx]*amp; if(yy<lo)yy=lo; if(yy>hi)yy=hi;
+          if(px===0)ctx.moveTo(x0+px,yy); else ctx.lineTo(x0+px,yy);
+        }
+        ctx.stroke();
+      }
+      if(W>H){
+        const cols=4,rows=3,cw=W/cols,ch=(H*0.8)/rows;
+        for(let ri=0;ri<rows;ri++)for(let ci=0;ci<cols;ci++)
+          engCell(LEAD12[ri][ci],ci*cw,ri*ch,cw,ch,ci*2.5,(ci+1)*2.5);
+        engCell("II",0,H*0.8,W,H*0.2,0,mEng.duration);
+      } else {
+        // Portrait: two columns of six. Each column is its own 2.5 s window.
+        const grid=[["I","aVR"],["II","aVL"],["III","aVF"],["V1","V2"],["V3","V4"],["V5","V6"]];
+        const cols=2,rows=6,cw=W/cols,ch=H/rows;
+        for(let ri=0;ri<rows;ri++)for(let ci=0;ci<cols;ci++)
+          engCell(grid[ri][ci],ci*cw,ri*ch,cw,ch,ci*2.5,ci*2.5+2.0);
+      }
+    }
+    else if(W>H){ const cols=4,rows=3,cw=W/cols,ch=(H*0.8)/rows; for(let ri=0;ri<rows;ri++)for(let ci=0;ci<cols;ci++)drawLead(LEAD12[ri][ci],ci*cw,ri*ch,cw,ch,2.5); drawLead("II",0,H*0.8,W,H*0.2,10); }
     else { const grid=[["I","aVR"],["II","aVL"],["III","aVF"],["V1","V2"],["V3","V4"],["V5","V6"]]; const cols=2,rows=6,cw=W/cols,ch=H/rows; for(let ri=0;ri<rows;ri++)for(let ci=0;ci<cols;ci++)drawLead(grid[ri][ci],ci*cw,ri*ch,cw,ch,2.0); }
-    let lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus"; const sEff=stemiSiteEff(); if(sEff)lab+=" — "+sEff.toUpperCase()+" STEMI";
+    let lab;
+    if(mEng){
+      lab=STATE.ecgCase;
+      const mm=mEng.measurements||{}, bits=[];
+      if(mm.pr)bits.push("PR "+mm.pr); if(mm.qrs)bits.push("QRS "+mm.qrs);
+      if(mm.qtc)bits.push("QTc "+mm.qtc);
+      if(bits.length) lab+=" · "+bits.join(" ");
+    } else {
+      lab=(RHYTHMS[STATE.rhythm]&&RHYTHMS[STATE.rhythm].label)||"Sinus";
+      const sEff=stemiSiteEff(); if(sEff)lab+=" — "+sEff.toUpperCase()+" STEMI";
+    }
     $("mm12info").textContent="HR "+(STATE.rhythm==="asystole"?0:STATE.hr)+" · "+lab+" · "+new Date().toLocaleTimeString(); }
   $("mm12acq").onclick=render12;
   window.addEventListener("resize",()=>{ if($("sc12").classList.contains("active")) setTimeout(render12,80); });
