@@ -608,7 +608,8 @@
         <span class="wscale" style="top:82%">0</span><canvas id="cCo2"></canvas>
         <div class="tapover" data-ch="co2">Tap to connect EtCO₂</div></div>
       <!-- SpO2 pleth -->
-      <div class="wave spo2"><span class="wlabel">SpO₂<span class="sc">1 X</span></span><canvas id="cPleth"></canvas>
+      <div class="wave spo2"><span class="wlabel">SpO₂<span class="sc">1 X</span></span>
+        <span class="estat" id="spo2Stat"></span><canvas id="cPleth"></canvas>
         <div class="tapover" data-ch="pleth">Tap to connect SpO₂</div></div>
     </div>
     <div class="params">
@@ -1457,18 +1458,21 @@ function runMonitor(){
       if((STATE.blankSeq||0)>lastBlankSeq){ lastBlankSeq=STATE.blankSeq; blankMonitor(); }
     }
 
+    // SpO2 (and any pulse-derived HR) need a real pulse. The probe reads nothing in
+    // PEA / VF / asystole / no perfusion — so we blank the numbers and show "pulse search",
+    // exactly like a real pulse oximeter with a probe on but no detectable pulse.
+    const plethFlat = noPulse() || STATE.spo2<1 || ((STATE.perfusion==null?100:STATE.perfusion)<=0);
     let hrShow;
     if(active.ecg){
       if(captured()) hrShow=STATE.pacerRate;
       else hrShow= STATE.rhythm==="asystole"?0 : (STATE.rhythm==="vfib"?"--":STATE.hr);
     } else if(active.pleth){
-      // pulse ox only (no ECG leads): the SpO2 probe derives a rate from the pulse,
-      // so it shows a HR without an ECG tracing — but needs a real pulse, so it blanks
-      // in PEA / asystole / VF, same as the SpO2 number does.
-      hrShow = (STATE.pea || STATE.rhythm==="asystole" || STATE.rhythm==="vfib") ? "--" : STATE.hr;
+      // pulse ox only (no ECG leads): HR is derived from the pleth, so it needs a pulse too.
+      hrShow = plethFlat ? "--" : STATE.hr;
     } else hrShow="--";
     setNum("nHr",hrShow);
-    setNum("nSpo2", !active.pleth? "--" : (STATE.pea?"--":STATE.spo2));
+    setNum("nSpo2", (!active.pleth || plethFlat) ? "--" : STATE.spo2);
+    { const ss=document.getElementById("spo2Stat"); if(ss) ss.textContent = (active.pleth && plethFlat) ? "pulse search" : ""; }
     const co2Shown = active.co2 && STATE.etco2On!==false;
     setNum("nEtco2", co2Shown? STATE.etco2 : "--");
     document.getElementById("nRr").textContent= co2Shown? STATE.rr : "--";
