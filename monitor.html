@@ -523,6 +523,7 @@
 
       <h4>New in v1.4</h4>
       <ul>
+        <li><b>Torsades de pointes</b> — a new polymorphic VT with the classic twisting-around-the-baseline morphology; it's shockable (unsynchronized) and decompensates under auto-physiology.</li>
         <li><b>Heart rate from the pulse ox alone</b> — with just the SpO₂ probe connected (no ECG leads), the monitor now shows a pulse-derived HR. BLS crews get a rate before ALS arrives and applies the cardiac monitor.</li>
         <li><b>"Pulse search" indicator</b> — when the SpO₂ probe is on but there's no pulse (PEA, V-Fib, asystole), the pleth reads <b>pulse search</b> and blanks the number, just like a real oximeter — instead of a confusing flat line.</li>
         <li><b>iPad now runs the full monitor</b> — tablets get the complete landscape monitor, while phones keep the purpose-built portrait UI.</li>
@@ -1086,7 +1087,8 @@ const RHYTHMS={
   hyperk_t:     {label:"HyperK: peaked T", hr:78, p:.14, pr:.16, qrs:.09, r:1.1, st:0,  t:.90, irregular:0, peakedT:1},
   hyperk_p:     {label:"HyperK: flat P",   hr:75, p:.04, pr:.24, qrs:.10, r:1.1, st:0,  t:.80, irregular:0, peakedT:1},
   hyperk_wide:  {label:"HyperK: wide QRS", hr:70, p:0,  pr:0,   qrs:.16, r:1.0, st:0,   t:.65, irregular:0, wide:1, peakedT:1},
-  hyperk_sine:  {label:"HyperK: sine wave", hr:60, special:"sine"}
+  hyperk_sine:  {label:"HyperK: sine wave", hr:60, special:"sine"},
+  torsades:     {label:"Torsades",          hr:230, special:"torsades"}
 };
 
 class EcgEngine{
@@ -1188,6 +1190,12 @@ class EcgEngine{
     if(!cap && c.special==="sine"){   // severe hyperkalemia — smooth continuous sine wave
       const hrr=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hrr,20), x=(this.t%per)/per;
       return spike + Math.sin(2*Math.PI*x-0.6)*0.42 + Math.sin(4*Math.PI*x)*0.05;
+    }
+    if(!cap && c.special==="torsades"){  // polymorphic VT — QRS amplitude waxes/wanes and the axis twists around the baseline
+      const per=60/230, ph=(this.t%per)/per;                       // fast (~230/min) polymorphic complexes
+      let q=Math.sin(2*Math.PI*ph)*1.0 + Math.sin(4*Math.PI*ph-0.4)*0.35;
+      const env=Math.sin(2*Math.PI*this.t/2.2);                    // slow "twisting" envelope (~2.2s per turn)
+      return (spike + q*(0.30+1.05*Math.abs(env))*(env>=0?1:-1) + (Math.random()-0.5)*0.04)*0.9;
     }
     const b=this.beat, tau=this.beatT; let v=spike;
     // captured paced beat: spike + wide paced QRS + discordant T
@@ -1393,7 +1401,7 @@ function runMonitor(){
         const rt=ecg.beat.rTime;
         if(rt!=null && ecg.beatT>=rt){
           ecg._fired=true;
-          if(!noPulse() && STATE.rhythm!=="vfib"){
+          if(!noPulse() && STATE.rhythm!=="vfib" && STATE.rhythm!=="torsades"){
             const f=600+(STATE.spo2-90)*8;
             tone(Math.max(400,f),0.07,0.18);
           }
@@ -1509,7 +1517,7 @@ function runMonitor(){
     }
     // alarms (only on activated channels)
     alarm("nHr",
-      (active.ecg && ((!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="asystole"))
+      (active.ecg && ((!captured() && STATE.rhythm!=="vfib"&&STATE.rhythm!=="asystole"&&(STATE.hr<50||STATE.hr>120)) || STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="torsades"||STATE.rhythm==="asystole"))
       || (!active.ecg && active.pleth && !STATE.pea && STATE.rhythm!=="asystole" && STATE.rhythm!=="vfib" && (STATE.hr<50||STATE.hr>120)));
     alarm("nSpo2", active.pleth && !STATE.pea && STATE.spo2<90);
     alarm("nEtco2", active.co2 && STATE.etco2On!==false && (STATE.etco2<25||STATE.etco2>55));
@@ -1630,7 +1638,7 @@ function runMonitor(){
   function monShock(){     // deliver energy: artifact + rhythm conversion (synced via shockSeq)
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
-    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
+    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="torsades"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       const tgt=STATE.convertTo||"sinus", tc=RHYTHMS[tgt]||RHYTHMS.sinus;
       const dead=(tgt==="asystole"||tgt==="vfib"||tgt==="pea");
@@ -1654,7 +1662,7 @@ function runMonitor(){
   function analyze(){
     if(charging||armed) return;
     flashMsg("ANALYZING…",2400,"#7fd1ff");
-    setTimeout(()=>{ const shock = STATE.rhythm==="vfib"||STATE.rhythm==="vt";
+    setTimeout(()=>{ const shock = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="torsades";
       flashMsg(shock?"⚡ SHOCK ADVISED":"NO SHOCK ADVISED",2200, shock?"#ff8a3a":"#7dd87d"); },2400);
   }
 
@@ -1762,6 +1770,9 @@ function leadValue(lead,t){
   if(c.special==="vf") return (Math.sin(t*44+lead.length)*0.4+(Math.random()-0.5)*0.3)*Math.abs(f);
   if(c.special==="sine"){ const hr0=STATE.hr>0?STATE.hr:c.hr, per=60/Math.max(hr0,20), x=(t%per)/per;
     return (Math.sin(2*Math.PI*x-0.6)*0.42+Math.sin(4*Math.PI*x)*0.05)*f; }
+  if(c.special==="torsades"){ const per=60/230, ph=(t%per)/per;
+    let q=Math.sin(2*Math.PI*ph)*1.0+Math.sin(4*Math.PI*ph-0.4)*0.35; const env=Math.sin(2*Math.PI*t/2.2);
+    return q*(0.30+1.05*Math.abs(env))*(env>=0?1:-1)*f; }
   let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
   const beatLen=60/hr, tau=t%beatLen; let v=0;
   const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
@@ -2142,7 +2153,7 @@ function runControl(){
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
     track("shock", (STATE.sync?"cardiovert ":"defib ")+STATE.shockEnergy+"J");
     let lab=(STATE.sync?"Cardiovert ":"Shock ")+STATE.shockEnergy+"J";
-    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
+    const conv = STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="torsades"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert && conv){
       const tgt=STATE.convertTo||"sinus", tc=RHYTHMS[tgt]||RHYTHMS.sinus;
       const dead=(tgt==="asystole"||tgt==="vfib"||tgt==="pea");
@@ -2294,7 +2305,7 @@ function runControl(){
       STATE.etco2= STATE.cpr ? ap(STATE.etco2,20,0.12) : Math.max(0,ap(STATE.etco2,0,0.15));
       STATE.sys  =Math.max(0, ap(STATE.sys,0,0.4));
       STATE.dia  =Math.max(0, ap(STATE.dia,0,0.4));
-    } else if(STATE.rhythm==="vt"){         // sustained VT → hemodynamic decompensation (not full arrest)
+    } else if(STATE.rhythm==="vt"||STATE.rhythm==="torsades"){  // sustained VT / torsades → hemodynamic decompensation (not full arrest)
       STATE.spo2 =Math.max(78,ap(STATE.spo2,80,0.05));
       STATE.etco2=Math.max(18,ap(STATE.etco2,22,0.05));
       STATE.sys  =Math.max(52,ap(STATE.sys,58,0.09));
@@ -2340,7 +2351,7 @@ function runControl(){
   function watchForLog(){
     if((STATE.shockSeq||0)>seen.shk){ seen.shk=STATE.shockSeq;
       const rhy=STATE.lastShockRhythm||"", sync=STATE.sync;
-      const good=(sync&&["svt","afib"].includes(rhy))||(!sync&&["vfib","vt"].includes(rhy));
+      const good=(sync&&["svt","afib"].includes(rhy))||(!sync&&["vfib","vt","torsades"].includes(rhy));
       dEvent((sync?"Cardiovert ":"Defib ")+STATE.lastShockEnergy+" J on "+rl(rhy), good?"ok":"warn");
       // shock that converted a lethal rhythm → ROSC (guard: skip if logLocal already logged it)
       if(arrest(rhy)&&!arrest(STATE.rhythm)&&dead(seenL.rhythm)){
@@ -2556,7 +2567,7 @@ function runMobileMonitor(){
   function stepEnergy(d){ let i=ENERGIES.indexOf(STATE.shockEnergy); if(i<0)i=3; i=Math.max(0,Math.min(ENERGIES.length-1,i+d)); STATE.shockEnergy=ENERGIES[i]; if(armed||charging)disarm(); broadcast(); renderTh(); }
   function deliverShock(){ if(!armed) return;
     STATE.shockSeq=(STATE.shockSeq||0)+1; STATE.lastShockEnergy=STATE.shockEnergy; STATE.lastShockRhythm=STATE.rhythm;
-    const conv=STATE.rhythm==="vfib"||STATE.rhythm==="vt"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
+    const conv=STATE.rhythm==="vfib"||STATE.rhythm==="vt"||STATE.rhythm==="torsades"||(STATE.sync&&(STATE.rhythm==="afib"||STATE.rhythm==="svt"));
     if(STATE.autoConvert!==false && conv){ const tgt=STATE.convertTo||"sinus", tc=RHYTHMS[tgt]||RHYTHMS.sinus, dead=(tgt==="asystole"||tgt==="vfib"||tgt==="pea");
       STATE.rhythm=tgt; STATE.hr=(tc.hr||90); STATE.pea=(tgt==="pea"); if(!dead){ if(STATE.sys<=0){STATE.sys=104;STATE.dia=64;} if(STATE.spo2<88)STATE.spo2=94; } }
     ecg.triggerShock(); broadcast(); disarm(); updNums();
