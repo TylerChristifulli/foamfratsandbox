@@ -355,6 +355,20 @@ animation:trace12 3.6s linear infinite;
 @keyframes codeA{0%,49%{opacity:1}50%,100%{opacity:0}}
 @keyframes codeB{0%,49%{opacity:0}50%,100%{opacity:1}}
 
+/* stroke screen face */
+.sk-head{fill:none;stroke:#b98cff;stroke-width:3;filter:drop-shadow(0 0 6px #b98cff)}
+.sk-brow{fill:none;stroke:#b98cff;stroke-width:3;stroke-linecap:round}
+.sk-eye{fill:#eafcff;animation:skgaze 3.2s ease-in-out infinite}
+.sk-mouth{fill:none;stroke:var(--amber);stroke-width:3.5;stroke-linecap:round;filter:drop-shadow(0 0 6px var(--amber))}
+.sk-m1{animation:codeA 3.2s steps(1) infinite}
+.sk-m2{stroke:#ff5a5f;filter:drop-shadow(0 0 6px #ff5a5f);animation:codeB 3.2s steps(1) infinite}
+.sk-dot{fill:#5a93ee;filter:drop-shadow(0 0 8px #5a93ee);animation:skdot 3.2s ease-in-out infinite}
+.sk-wave rect{fill:var(--cyan);filter:drop-shadow(0 0 4px var(--cyan));transform-box:fill-box;transform-origin:center;animation:skwave .9s ease-in-out infinite}
+@keyframes skgaze{0%,100%{transform:translateX(-4px)}50%{transform:translateX(4px)}}
+@keyframes skdot{0%,100%{transform:translateX(-130px)}50%{transform:translateX(130px)}}
+@keyframes skwave{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+@media(prefers-reduced-motion:reduce){.sk-eye,.sk-dot,.sk-wave rect{animation:none}}
+
 footer{
 position:relative;
 z-index:10;
@@ -589,6 +603,39 @@ L450,138 Q480,138 494,118 Q508,98 528,118 Q542,132 560,138 L600,138" />
 <p class="cab-sub">Clotting vs. bleeding</p>
 <div class="badges"><span class="badge">1 PLAYER</span></div>
 <a class="play" href="dic.html">PLAY ►</a>
+</div>
+
+<!-- Stroke Assessment Trainer cabinet (experimental). Lives at github.com/TylerChristifulli/stroke-assessment-trainer -->
+<div class="cabinet">
+<div class="cab-marquee" style="text-shadow:0 0 10px #b98cff,0 0 22px #b98cff;border-color:rgba(185,140,255,.5)">STROKE SCREEN</div>
+<div class="screen">
+<span class="scr-label" style="color:#b98cff;text-shadow:0 0 8px #b98cff">L MCA</span>
+<span class="scr-bpm" style="color:var(--amber);text-shadow:0 0 8px var(--amber)">"SMILE"</span>
+<svg viewBox="0 0 600 160" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+<ellipse class="sk-head" cx="300" cy="76" rx="48" ry="56"/>
+<path class="sk-brow" d="M270,56 Q281,50 292,56 M308,56 Q319,50 330,56"/>
+<circle class="sk-eye" cx="282" cy="70" r="5"/>
+<circle class="sk-eye" cx="318" cy="70" r="5"/>
+<path class="sk-mouth sk-m1" d="M280,100 Q300,116 320,100"/>
+<path class="sk-mouth sk-m2" d="M280,108 Q300,114 320,99"/>
+<circle class="sk-dot" cx="300" cy="148" r="6"/>
+<g class="sk-wave">
+<rect x="430" y="62" width="8" height="28" rx="3" style="animation-delay:0s"/>
+<rect x="444" y="56" width="8" height="40" rx="3" style="animation-delay:.15s"/>
+<rect x="458" y="64" width="8" height="24" rx="3" style="animation-delay:.3s"/>
+<rect x="472" y="58" width="8" height="36" rx="3" style="animation-delay:.45s"/>
+</g>
+</svg>
+</div>
+<h2 class="cab-title">Stroke Assessment</h2>
+<p class="cab-sub">Talk to him &middot; face, gaze &amp; speech</p>
+<div class="badges">
+<span class="badge">1 PLAYER</span>
+<span class="badge on">VOICE</span>
+<span class="badge on">CAMERA</span>
+<span class="badge on">EXPERIMENTAL</span>
+</div>
+<a class="play" href="https://tylerchristifulli.github.io/stroke-assessment-trainer/">PLAY &#9658;</a>
 </div>
 
 </div>
