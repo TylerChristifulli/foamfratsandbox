@@ -1740,7 +1740,7 @@ function runMonitor(){
     return {
       tick(dt){
         const nx=x+pps*dt;
-        ctx.fillStyle="#000";ctx.fillRect(nx,0,8*devicePixelRatio,H); // blanking cursor
+        ctx.fillStyle="#000";ctx.fillRect(nx,0,3*devicePixelRatio,H); // blanking cursor (thin, so the refresh gap is a hairline — matters most on smooth curves like CO₂)
         const val=fn();
         if(val===null){ prevY=null; x=nx; if(x>=W)x=0; return; } // pen up: blank channel
         const yy=H*opt.base - val*opt.amp*H;   // baseline at opt.base*H, +ve goes up
@@ -2518,7 +2518,7 @@ function runMobileMonitor(){
       W=cv.width;H=cv.height; ctx.lineWidth=2.2*devicePixelRatio; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null; }
     new ResizeObserver(resize).observe(cv); resize();
     return { tick(dt){ const pps=(opt.pps||150)*devicePixelRatio, nx=x+pps*dt;
-      ctx.fillStyle="#000"; ctx.fillRect(nx,0,7*devicePixelRatio,H);
+      ctx.fillStyle="#000"; ctx.fillRect(nx,0,3*devicePixelRatio,H);
       const v=fn(); const yy=H*opt.base - v*opt.amp*H;
       if(prevY!==null){ ctx.strokeStyle=opt.color; ctx.beginPath(); ctx.moveTo(x,prevY); ctx.lineTo(nx,yy); ctx.stroke(); }
       prevY=yy; x=nx; if(x>=W){ x=0; prevY=null; } },
