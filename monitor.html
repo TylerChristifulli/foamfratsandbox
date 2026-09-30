@@ -524,6 +524,7 @@
       <h4>New in v1.4</h4>
       <ul>
         <li><b>Torsades de pointes</b> — a new polymorphic VT with the classic twisting-around-the-baseline morphology; it's shockable (unsynchronized) and decompensates under auto-physiology.</li>
+        <li><b>Bronchospasm capnography</b> — a Quick Events toggle that switches EtCO₂ to the classic "shark-fin" waveform (prolonged, up-sloping expiration with no plateau) for asthma/COPD scenarios.</li>
         <li><b>Heart rate from the pulse ox alone</b> — with just the SpO₂ probe connected (no ECG leads), the monitor now shows a pulse-derived HR. BLS crews get a rate before ALS arrives and applies the cardiac monitor.</li>
         <li><b>"Pulse search" indicator</b> — when the SpO₂ probe is on but there's no pulse (PEA, V-Fib, asystole), the pleth reads <b>pulse search</b> and blanks the number, just like a real oximeter — instead of a confusing flat line.</li>
         <li><b>iPad now runs the full monitor</b> — tablets get the complete landscape monitor, while phones keep the purpose-built portrait UI.</li>
@@ -830,6 +831,9 @@
       <div style="margin-top:10px" class="toggle">
         <div class="switch on" id="swEtco2"></div><span>Show EtCO₂ on monitor</span>
       </div>
+      <div style="margin-top:10px" class="toggle">
+        <div class="switch" id="swBronch"></div><span>Bronchospasm capnography — "shark-fin" EtCO₂</span>
+      </div>
     </div>
 
     <div class="box">
@@ -943,7 +947,7 @@ const STATE = {
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
-  tempC:false, etco2On:true,
+  tempC:false, etco2On:true, bronch:false,
   // chest compressions in progress (overlays compression artifact on the ECG)
   cpr:false
 };
@@ -1348,6 +1352,17 @@ function runMonitor(){
     if(!active.co2 || STATE.etco2On===false) return null;   // channel off, or EtCO₂ hidden by control
     if(STATE.rr<1) return 0;
     const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
+    if(STATE.bronch){
+      // Bronchospasm ("shark-fin"): loss of the sharp phase II/III angle and of the flat
+      // plateau — a single prolonged, up-sloping expiratory limb that keeps climbing to the
+      // end-tidal peak, then a quick downstroke. Classic obstructive (asthma/COPD) capnogram.
+      const upA=0.20, dnB=0.80;                        // prolonged expiration
+      if(x<upA) return 0;                              // inspiratory baseline
+      if(x<dnB){ const u=(x-upA)/(dnB-upA);            // rounded takeoff that never flattens (slope>0 at the tip)
+        return et*(0.55*(1-(1-u)*(1-u))+0.45*u); }
+      if(x<0.90){ const u=(x-dnB)/(0.90-dnB); return et*(1-u*u); }  // fast inspiratory downstroke
+      return 0;
+    }
     // Realistic capnogram. Phase boundaries as fractions of the breath cycle.
     // Expiration runs 0.30→0.78 (~48%) — shorter/more compact than before.
     const upA=0.30, upB=0.37, plB=0.72, dnB=0.78;
@@ -2074,6 +2089,7 @@ function runControl(){
     document.getElementById("swPulse").classList.toggle("on",STATE.pulse);
     document.getElementById("swPea").classList.toggle("on",STATE.pea);
     document.getElementById("swAline").classList.toggle("on",STATE.aline);
+    {const e=document.getElementById("swBronch"); if(e) e.classList.toggle("on",!!STATE.bronch);}
     document.getElementById("swSync").classList.toggle("on",STATE.sync);
     document.getElementById("swAutoConv").classList.toggle("on",STATE.autoConvert);
     document.getElementById("swPacer").classList.toggle("on",STATE.pacerOn);
@@ -2087,6 +2103,7 @@ function runControl(){
   // toggles
   document.getElementById("swPulse").onclick=e=>{STATE.pulse=!STATE.pulse;e.target.classList.toggle("on",STATE.pulse);push(null);};
   document.getElementById("swAline").onclick=e=>{STATE.aline=!STATE.aline;e.target.classList.toggle("on",STATE.aline);push("A-line "+(STATE.aline?"placed":"removed"));};
+  document.getElementById("swBronch").onclick=e=>{STATE.bronch=!STATE.bronch;e.currentTarget.classList.toggle("on",STATE.bronch);push("Bronchospasm capnography "+(STATE.bronch?"ON (shark-fin)":"OFF"));};
   document.getElementById("swPea").onclick=e=>{STATE.pea=!STATE.pea;e.target.classList.toggle("on",STATE.pea);push("PEA "+STATE.pea);};
 
   /* ---- defibrillation / cardioversion ---- */
@@ -2253,7 +2270,7 @@ function runControl(){
     if(nibpTimer){clearInterval(nibpTimer);nibpTimer=null;} document.getElementById("nibpAuto").value="0";
     setMany({rhythm:"sinus",hr:80,spo2:98,rr:16,etco2:38,sys:120,dia:80,temp:98.6,perfusion:100,
       pulse:false,pea:false,aline:false,sync:false,autoConvert:true,convertTo:"sinus",
-      cpr:false,tempC:false,etco2On:true,stemiSite:"none",
+      cpr:false,tempC:false,etco2On:true,bronch:false,stemiSite:"none",
       pacerOn:false,pacerRate:70,pacerMa:0,captureMa:60,shockEnergy:200});
     STATE.blankSeq=(STATE.blankSeq||0)+1;      // tell the student monitor to disconnect all monitoring
     push("reset for new group");
@@ -2478,6 +2495,11 @@ function runMobileMonitor(){
     else{const u=(x-0.56)/0.44;y=0.45-0.30*(u*u*(3-2*u));}
     const perf=(STATE.perfusion==null?100:STATE.perfusion)/100; return y*(STATE.spo2/100)*perf; }
   function co2Val(){ if(STATE.etco2On===false||STATE.rr<1) return 0; const period=60/STATE.rr, x=(co2Phase%period)/period, et=STATE.etco2;
+    if(STATE.bronch){ const upA=0.20,dnB=0.80;                 // bronchospasm "shark-fin": prolonged up-sloping expiration, no plateau
+      if(x<upA)return 0;
+      if(x<dnB){const u=(x-upA)/(dnB-upA);return et*(0.55*(1-(1-u)*(1-u))+0.45*u);}
+      if(x<0.90){const u=(x-dnB)/(0.90-dnB);return et*(1-u*u);}
+      return 0; }
     const upA=0.30,upB=0.37,plB=0.72,dnB=0.78;
     if(x<upA)return 0;
     if(x<upB){const u=(x-upA)/(upB-upA);return et*0.92*(1-(1-u)*(1-u));}
