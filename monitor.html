@@ -403,6 +403,18 @@
     padding:8px 14px;font-size:13px;font-weight:700;}
   .twelve canvas{flex:1;width:100%;min-height:0;display:block;background:#fff;}
 
+  /* ---------- Glucose check (pre-rendered fingerstick + live LCD reading) ---------- */
+  .glu{display:none;position:fixed;inset:0;background:#000;z-index:61;overflow:hidden;}
+  .glu.show{display:block;}
+  .glu video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;}
+  .glu .gscr{position:absolute;left:0;top:0;width:370px;height:340px;transform-origin:0 0;pointer-events:none;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:#454a50;font-weight:500;}
+  .glu .gscr div{position:absolute;left:50%;transform:translate(-50%,-50%);line-height:1;white-space:nowrap;display:none;}
+  #gluCount{top:48.5%;font-size:220px;} #gluVal{top:38%;font-size:170px;letter-spacing:4px;} #gluUnit{left:62%;top:79%;font-size:60px;}
+  .glu .gclose{position:absolute;top:10px;right:12px;z-index:2;background:rgba(184,18,18,.85);border:none;color:#fff;
+    border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;}
+  .glu .gload{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#9aa;font-size:14px;display:none;}
+
   /* ---------- Debrief overlay ---------- */
   .debrief{display:none;position:fixed;inset:0;background:#0c0c0c;color:#eee;z-index:60;flex-direction:column;}
   .debrief.show{display:flex;}
@@ -813,6 +825,19 @@
     </div>
 
     <div class="box">
+      <h3>Glucose Check (BGL)</h3>
+      <div class="trendrow">
+        <label>Glucose <input id="bglVal" type="number" class="numin" min="0" max="999" value="112"> mg/dL</label>
+        <label>Hand
+          <select id="bglHand" class="sel"><option value="male">Male</option><option value="female">Female</option></select>
+        </label>
+        <button class="startbtn" id="bglShow">🩸 Show Glucose Check</button>
+        <button class="cyclebtn" id="bglClose">✕ Close</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Plays a fingerstick glucose check on the monitor that ends on the value you enter (over 600 shows HI, under 20 shows LO). The meter keeps floating on screen until you close it.</div>
+    </div>
+
+    <div class="box">
       <h3>Active Trends</h3>
       <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Tap the ⏱ next to any vital to trend it to a target over time. Several can run at once.</div>
       <div class="log" id="rampLog">No active trends.</div>
@@ -914,6 +939,14 @@
   <canvas id="cTwelve"></canvas>
 </div>
 
+<!-- ============ GLUCOSE CHECK OVERLAY ============ -->
+<div id="glu" class="glu">
+  <video id="gluVid" playsinline muted preload="auto"></video>
+  <div class="gscr" id="gluScreen"><div id="gluCount"></div><div id="gluVal"></div><div id="gluUnit">mg/dL</div></div>
+  <div class="gload" id="gluLoad">loading glucose check…</div>
+  <button class="gclose" id="gluClose">✕ Close</button>
+</div>
+
 <!-- ============ CAMERA ============ -->
 <div id="camera">
   <video id="camLocal" autoplay playsinline muted></video>
@@ -944,6 +977,8 @@ const STATE = {
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
   stemiSite:"none", ecg12Seq:0, twelveCloseSeq:0, blankSeq:0,
+  // glucose check (fingerstick animation on the monitor)
+  bgl:112, bglHand:"male", bglSeq:0, bglCloseSeq:0,
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
@@ -1276,6 +1311,70 @@ class EcgEngine{
 /* =========================================================================
    MONITOR RENDERING
    ========================================================================= */
+/* =========================================================================
+   GLUCOSE CHECK — pre-rendered fingerstick animation (glucose/glucose_<hand>.mp4)
+   with the meter reading drawn live on the LCD, pinned to per-frame screen
+   corners exported from Blender (glucose/glucose_track.json).
+   ========================================================================= */
+const GLU=(()=>{
+  let track=null, trackP=null, raf=0, showing=false, value=112;
+  const $g=id=>document.getElementById(id);
+  const src=h=>"glucose/glucose_"+(h==="female"?"female":"male")+".mp4";
+  function loadTrack(){ if(!trackP) trackP=fetch("glucose/glucose_track.json").then(r=>r.json()).then(j=>(track=j)).catch(()=>null); return trackP; }
+  function preload(h){ const v=$g("gluVid"); if(!v) return; h=h==="female"?"female":"male";
+    if(v.dataset.hand!==h){ v.src=src(h); v.dataset.hand=h; try{v.load();}catch(e){} } loadTrack(); }
+  const reading=x=>{ x=Math.round(+x); if(!(x>=0)) return "--"; return x>600?"HI":(x<20?"LO":String(x)); };
+  // projective map of the W×H screen div onto the 4 tracked corners (TL,TR,BR,BL) → CSS matrix3d
+  function quadMatrix(W,H,q){
+    const [x0,y0,x1,y1,x2,y2,x3,y3]=q;
+    const dx1=x1-x2, dx2=x3-x2, dx3=x0-x1+x2-x3, dy1=y1-y2, dy2=y3-y2, dy3=y0-y1+y2-y3;
+    const den=dx1*dy2-dx2*dy1 || 1e-9;
+    const g=(dx3*dy2-dx2*dy3)/den, h=(dx1*dy3-dx3*dy1)/den;
+    const a=x1-x0+g*x1, b=x3-x0+h*x3, c=x0, d=y1-y0+g*y1, e=y3-y0+h*y3, f=y0;
+    return "matrix3d("+[a/W,d/W,0,g/W, b/H,e/H,0,h/H, 0,0,1,0, c,f,0,1].map(n=>+n.toFixed(6)).join(",")+")";
+  }
+  function draw(){
+    raf=requestAnimationFrame(draw);
+    const v=$g("gluVid"); if(!showing||!track||!v) return;
+    const fps=track.fps||24;
+    // idle float loops: last frame == loopStart, so jump back (to the keyframe at loopStart)
+    if(v.currentTime >= (track.loopEnd-1.5)/fps){ try{ v.currentTime=track.loopStart/fps; }catch(e){} if(v.paused) v.play().catch(()=>{}); }
+    let fr=Math.min(track.frames,Math.max(1,Math.floor(v.currentTime*fps+0.001)+1));
+    const ov=$g("glu"), ow=ov.clientWidth, oh=ov.clientHeight, vw0=v.videoWidth||1280, vh0=v.videoHeight||720;
+    const sc=Math.min(ow/vw0,oh/vh0), vw=vw0*sc, vh=vh0*sc, ox=(ow-vw)/2, oy=(oh-vh)/2;
+    const c=track.corners[fr-1], q=[]; for(let i=0;i<8;i+=2) q.push(ox+c[i]*vw, oy+c[i+1]*vh);
+    const scr=$g("gluScreen"); scr.style.transform=quadMatrix(370,340,q);
+    const cd=$g("gluCount"), val=$g("gluVal"), un=$g("gluUnit");
+    if(fr<track.countdownStart){ cd.style.display=val.style.display=un.style.display="none"; }
+    else if(fr<track.readingFrame){ cd.textContent=String(5-Math.floor((fr-track.countdownStart)/track.countdownStep));
+      cd.style.display="block"; val.style.display=un.style.display="none"; }
+    else { val.textContent=reading(value); cd.style.display="none"; val.style.display=un.style.display="block"; }
+    $g("gluLoad").style.display=(v.readyState<2)?"block":"none";
+  }
+  async function show(x,hand){
+    value=x; preload(hand); const v=$g("gluVid"); $g("glu").classList.add("show"); showing=true;
+    $g("gluScreen").querySelectorAll("div").forEach(d=>d.style.display="none");
+    await loadTrack(); if(!showing) return;
+    try{ v.currentTime=0; }catch(e){} v.play().catch(()=>{});
+    cancelAnimationFrame(raf); raf=requestAnimationFrame(draw);
+  }
+  function hide(){ showing=false; cancelAnimationFrame(raf); const v=$g("gluVid"); if(v) v.pause(); $g("glu").classList.remove("show"); }
+  return {show,hide,preload,isShowing:()=>showing};
+})();
+// monitor side: react to control-room glucose events (ignores retained state on load, like the 12-lead)
+function gluWatch(){
+  let last=STATE.bglSeq||0, lastC=STATE.bglCloseSeq||0, primed=false;
+  setTimeout(()=>{ primed=true; last=STATE.bglSeq||0; lastC=STATE.bglCloseSeq||0; },2000);
+  GLU.preload(STATE.bglHand||"male");
+  document.getElementById("gluClose").onclick=()=>GLU.hide();
+  onState.push(()=>{
+    if(!GLU.isShowing()) GLU.preload(STATE.bglHand||"male");
+    if(!primed) return;
+    if((STATE.bglSeq||0)>last){ last=STATE.bglSeq; GLU.show(STATE.bgl,STATE.bglHand); track("glucose_view",STATE.bgl); }
+    if((STATE.bglCloseSeq||0)>lastC){ lastC=STATE.bglCloseSeq; GLU.hide(); }
+  });
+}
+
 function runMonitor(){
   document.getElementById("chooser").style.display="none";
   document.getElementById("monitor").style.display="flex";
@@ -1715,6 +1814,7 @@ function runMonitor(){
   }
 
   onState.push(updNums); updNums();
+  gluWatch();
 
   // top bar date + elapsed case timer
   const t0=Date.now();
@@ -2277,6 +2377,17 @@ function runControl(){
   document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); track("twelve_lead", STATE.stemiSite||"normal"); };
   document.getElementById("close12").onclick=()=>{ STATE.twelveCloseSeq=(STATE.twelveCloseSeq||0)+1; push("12-lead closed"); };
 
+  /* ---- glucose check ---- */
+  const bglIn=document.getElementById("bglVal"), bglHandSel=document.getElementById("bglHand");
+  bglIn.value=(STATE.bgl!=null?STATE.bgl:112); bglHandSel.value=STATE.bglHand||"male";
+  bglHandSel.onchange=e=>{ STATE.bglHand=e.target.value; push("Glucose hand "+STATE.bglHand); };
+  const bglGo=()=>{ const v=Math.max(0,Math.min(999,Math.round(+bglIn.value||0))); bglIn.value=v;
+    STATE.bgl=v; STATE.bglHand=bglHandSel.value; STATE.bglSeq=(STATE.bglSeq||0)+1;
+    push("Glucose check "+v+" mg/dL"); track("glucose_check",v); };
+  document.getElementById("bglShow").onclick=bglGo;
+  bglIn.addEventListener("keydown",e=>{ if(e.key==="Enter") bglGo(); });
+  document.getElementById("bglClose").onclick=()=>{ STATE.bglCloseSeq=(STATE.bglCloseSeq||0)+1; push("Glucose check closed"); };
+
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
     clearTrends();
@@ -2361,7 +2472,7 @@ function runControl(){
   const dead=r=>["vfib","asystole"].includes(r), arrest=r=>["vfib","asystole","pea"].includes(r);
   const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
   let dbgLog=[], dbgT0=null, dbgEnd=null, dbgRunning=false, dbgTimer=null;
-  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};   // monotonic counters
+  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,glu:STATE.bglSeq||0};   // monotonic counters
   let seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};       // authoritative levels
   const dEvent=(label,cls)=>{ if(!dbgRunning)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
 
@@ -2390,6 +2501,7 @@ function runControl(){
     }
     if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP "+STATE.sys+"/"+STATE.dia+" (MAP "+Math.round((STATE.sys+2*STATE.dia)/3)+")"); }
     if((STATE.ecg12Seq||0)>seen.tw){ seen.tw=STATE.ecg12Seq; dEvent("12-lead acquired ["+(STATE.stemiSite||"—")+"]"); }
+    if((STATE.bglSeq||0)>(seen.glu||0)){ seen.glu=STATE.bglSeq; dEvent("Glucose check — "+STATE.bgl+" mg/dL"); }
     syncSliders();
   }
   onState.push(watchForLog);
@@ -2415,7 +2527,7 @@ function runControl(){
   }
   document.getElementById("btnScenStart").onclick=()=>{
     dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true; lastSnap=performance.now();
-    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
+    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,glu:STATE.bglSeq||0};
     seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
     dEvent("Scenario start — "+rl(STATE.rhythm)); vitalsSnapshot(); track("scenario_start", rl(STATE.rhythm));
     if(!dbgTimer) dbgTimer=setInterval(dbgTick,1000);
@@ -2568,6 +2680,7 @@ function runMobileMonitor(){
   }
   let nibpBusy=false;
   onState.push(updNums); updNums(); setInterval(updNums,400);
+  gluWatch();
 
   // NIBP cycle with a brief "measuring" beat
   function cycleBp(){ if(nibpBusy) return; nibpBusy=true; STATE.nibpSeq=(STATE.nibpSeq||0)+1; if(anyConnected()) broadcast();
