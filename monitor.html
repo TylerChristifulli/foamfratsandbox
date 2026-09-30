@@ -1305,7 +1305,7 @@ function runMonitor(){
   const waves=[
     setupWave("cEcg",  ()=>active.ecg?ecg.value():null, {amp:0.26, base:0.60, color:getCss("--ecg")}),
     setupWave("cArt",  ()=>artVal(),    {amp:0.64/180, base:0.82, color:getCss("--art")}),
-    setupWave("cCo2",  ()=>co2Val(),    {amp:0.64/60,  base:0.82, color:getCss("--co2"), speed:.55}),
+    setupWave("cCo2",  ()=>co2Val(),    {amp:0.64/60,  base:0.82, color:getCss("--co2")}),   // sweeps in lockstep with the other lanes (single aligned wipe bar)
     setupWave("cPleth",()=>plethVal(),  {amp:0.42,     base:0.80, color:getCss("--spo2")})
   ];
 
@@ -1438,7 +1438,7 @@ function runMonitor(){
   // re-baseline for ~2s while the initial sync settles, then arm real events.
   setTimeout(()=>{ eventsPrimed=true; }, 2000);
 
-  const NIBP_DUR=30;                 // seconds for a full measurement
+  const NIBP_DUR=14;                 // max seconds (safety cap); reading normally appears earlier, when the cuff bleeds past diastolic
   let nibpAnim=null, nibpStart=0;
   function renderNibp(){
     if(nibpCycling) return;          // the cuff animation owns the display while cycling
@@ -1455,20 +1455,26 @@ function runMonitor(){
     const bar=document.getElementById("nibpBar"); bar.style.display="block";
     document.getElementById("nNibp").classList.remove("alarm");
     if(nibpAnim) clearInterval(nibpAnim);
+    // Real NIBP: the cuff inflates above systolic, then bleeds down. The reading is
+    // obtained oscillometrically DURING deflation, so it appears while the cuff is still
+    // around diastolic pressure — it does NOT keep counting all the way down to zero.
+    const target=Math.max(STATE.sys+30,150);      // peak cuff pressure (above systolic)
+    const dia=Math.max(STATE.dia,20);             // reveal once the cuff bleeds past diastolic
+    const inflateT=3.5;                           // ~3.5s to inflate
     nibpAnim=setInterval(()=>{
       const el=(performance.now()-nibpStart)/1000;
-      if(el>=NIBP_DUR){
+      let cuff = el<inflateT ? target*(el/inflateT)
+               : target*Math.max(0,1-(el-inflateT)/(NIBP_DUR-inflateT));   // linear bleed-down
+      const done = (el>inflateT+0.5 && cuff<=dia) || el>=NIBP_DUR;         // reading obtained at diastolic crossing
+      if(done){
         clearInterval(nibpAnim); nibpAnim=null; nibpCycling=false;
         nibpShown={sys:STATE.sys,dia:STATE.dia};
         bar.style.display="none"; renderNibp(); return;
       }
-      // progress bar + simulated cuff pressure (inflate ~10s, then bleed down)
       bar.firstElementChild.style.width=Math.min(100,(el/NIBP_DUR)*100)+"%";
-      const target=Math.max(STATE.sys+30,140);
-      const cuff = el<10 ? target*(el/10) : target*Math.max(0,1-(el-10)/(NIBP_DUR-10));
       document.querySelector("#nNibp .val").textContent=Math.round(cuff);
       document.getElementById("nMap").textContent="measuring";
-    },150);
+    },120);
   }
   function flashMsg(text,ms,color){
     const el=document.getElementById("shockFlash");
