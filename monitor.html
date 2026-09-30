@@ -1308,6 +1308,11 @@ function runMonitor(){
     setupWave("cCo2",  ()=>co2Val(),    {amp:0.64/60,  base:0.82, color:getCss("--co2")}),   // sweeps in lockstep with the other lanes (single aligned wipe bar)
     setupWave("cPleth",()=>plethVal(),  {amp:0.42,     base:0.80, color:getCss("--spo2")})
   ];
+  // wipe the traces instantly when a waveform-shaping setting changes, so the previous
+  // morphology doesn't linger on screen until the sweep slowly overwrites it
+  const waveSig=()=>[STATE.rhythm,STATE.bronch,STATE.aline,STATE.etco2On,STATE.pacerOn,STATE.pea].join("|");
+  let _waveSig=waveSig();
+  onState.push(()=>{ const s=waveSig(); if(s!==_waveSig){ _waveSig=s; waves.forEach(w=>w.clear&&w.clear()); } });
 
   // pleth synced to the (effective) pulse rate
   let plethPhase=0;
@@ -1570,6 +1575,7 @@ function runMonitor(){
   // "Reset for new group" blanks the student monitor — all channels back to "tap to connect"
   function blankMonitor(){ if(PREVIEW) return;   // the control-room preview always mirrors live channels
     ["ecg","pleth","co2"].forEach(ch=>setChannel(ch,false));
+    waves.forEach(w=>w.clear&&w.clear());        // wipe any leftover traces so a new group starts on a truly blank screen
     nibpShown=null; nibpCycling=false; if(nibpAnim){clearInterval(nibpAnim);nibpAnim=null;}
     const nb=document.getElementById("nibpBar"); if(nb) nb.style.display="none";
     updNums(); }
@@ -1738,6 +1744,7 @@ function runMonitor(){
     // tick runs once per fine simulation sub-step, so dt is tiny and fn()
     // returns a fresh sample each call -> smooth trace, no staircase.
     return {
+      clear(){ ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null; },  // wipe instantly when the waveform changes so no stale trace lingers
       tick(dt){
         const nx=x+pps*dt;
         ctx.fillStyle="#000";ctx.fillRect(nx,0,3*devicePixelRatio,H); // blanking cursor (thin, so the refresh gap is a hairline — matters most on smooth curves like CO₂)
@@ -2517,7 +2524,8 @@ function runMobileMonitor(){
     function resize(){ const r=cv.getBoundingClientRect(); cv.width=Math.max(1,r.width*devicePixelRatio); cv.height=Math.max(1,r.height*devicePixelRatio);
       W=cv.width;H=cv.height; ctx.lineWidth=2.2*devicePixelRatio; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null; }
     new ResizeObserver(resize).observe(cv); resize();
-    return { tick(dt){ const pps=(opt.pps||150)*devicePixelRatio, nx=x+pps*dt;
+    return { clear(){ ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H); x=0; prevY=null; },
+      tick(dt){ const pps=(opt.pps||150)*devicePixelRatio, nx=x+pps*dt;
       ctx.fillStyle="#000"; ctx.fillRect(nx,0,3*devicePixelRatio,H);
       const v=fn(); const yy=H*opt.base - v*opt.amp*H;
       if(prevY!==null){ ctx.strokeStyle=opt.color; ctx.beginPath(); ctx.moveTo(x,prevY); ctx.lineTo(nx,yy); ctx.stroke(); }
@@ -2530,6 +2538,10 @@ function runMobileMonitor(){
     mkWave("mmCo2",  ()=>co2Val(),    {amp:0.60/60, base:0.88, color:getCss("--co2"), pps:90}),
   ];
   const thWave=mkWave("thEcg",()=>ecg.value(),{amp:0.26,base:0.55,color:getCss("--ecg"),pps:170}); waves.push(thWave);
+  // wipe traces instantly on a waveform-shaping change so the old morphology doesn't linger
+  const waveSig=()=>[STATE.rhythm,STATE.bronch,STATE.aline,STATE.etco2On,STATE.pacerOn,STATE.pea].join("|");
+  let _waveSig=waveSig();
+  onState.push(()=>{ const s=waveSig(); if(s!==_waveSig){ _waveSig=s; waves.forEach(w=>w.clear&&w.clear()); } });
 
   // ---- numbers + per-parameter alarm emphasis ----
   const bandOf=id=>$(id).closest(".mband");
