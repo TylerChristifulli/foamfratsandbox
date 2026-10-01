@@ -403,20 +403,6 @@
     padding:8px 14px;font-size:13px;font-weight:700;}
   .twelve canvas{flex:1;width:100%;min-height:0;display:block;background:#fff;}
 
-  /* ---------- Glucose check (pre-rendered fingerstick + live LCD reading) ---------- */
-  .glu{display:none;position:fixed;inset:0;background:#000;z-index:61;overflow:hidden;}
-  .glu.show{display:block;}
-  .glu video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;}
-  .glu .gscr{position:absolute;left:0;top:0;width:370px;height:340px;transform-origin:0 0;pointer-events:none;
-    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;color:#454a50;font-weight:500;}
-  .glu .gscr div{position:absolute;left:50%;transform:translate(-50%,-50%);line-height:1;white-space:nowrap;display:none;}
-  #gluCount{top:48.5%;font-size:220px;} #gluVal{top:38%;font-size:170px;letter-spacing:4px;} #gluUnit{left:62%;top:79%;font-size:60px;}
-  .glu .gclose{position:absolute;top:10px;right:12px;z-index:2;background:rgba(184,18,18,.85);border:none;color:#fff;
-    border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;}
-  .glu .gtap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;display:none;background:#19e03a;color:#000;
-    border:none;border-radius:14px;padding:16px 28px;font-size:20px;font-weight:800;}
-  .glu .gload{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#9aa;font-size:14px;display:none;}
-
   /* ---------- Debrief overlay ---------- */
   .debrief{display:none;position:fixed;inset:0;background:#0c0c0c;color:#eee;z-index:60;flex-direction:column;}
   .debrief.show{display:flex;}
@@ -525,22 +511,15 @@
     </div>
   </div>
   <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
-  <button class="verchip" id="verChip">v1.5 · What's new</button>
+  <button class="verchip" id="verChip">v1.4 · What's new</button>
 </div>
 
 <!-- ============ RELEASE NOTES MODAL ============ -->
 <div id="relnotes" class="relmodal">
   <div class="relcard">
-    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.5 · Sep 2026</span><button class="x" id="relClose">✕ Close</button></div>
+    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.4 · Sep 2026</span><button class="x" id="relClose">✕ Close</button></div>
     <div class="relbody">
       <p class="kick">A rolling summary of everything added and improved since launch.</p>
-
-      <h4>New in v1.5</h4>
-      <ul>
-        <li><b>Glucose check (BGL)</b>: a new Control Room box. Type a mg/dL value, pick a male or female hand, and hit <b>Show Glucose Check</b>. The monitor plays a fingerstick: the lancet presses on the side of the fingertip, a drop of blood forms, the meter wicks it up, counts down, and shows your number.</li>
-        <li><b>Real meter behavior</b>: readings over 600 show <b>HI</b> and under 20 show <b>LO</b>. The meter stays floating on screen until you close it from the Control Room or the monitor.</li>
-        <li><b>Logged in the debrief</b>: every glucose check is time-stamped with its value in the competency log.</li>
-      </ul>
 
       <h4>New in v1.4</h4>
       <ul>
@@ -592,7 +571,7 @@
       <h4>Physiology &amp; debrief</h4>
       <ul>
         <li><b>Auto-physiology</b> — the patient deteriorates in arrest and recovers after a successful shock or pacing capture (EtCO₂ rises with ROSC).</li>
-        <li><b>Competency debrief log</b> — timestamped record of shocks, pacing, NIBP, 12-leads, glucose checks, ROSC and vitals, with a metrics screen and copy-log.</li>
+        <li><b>Competency debrief log</b> — timestamped record of shocks, pacing, NIBP, 12-leads, ROSC and vitals, with a metrics screen and copy-log.</li>
       </ul>
 
       <h4>Control room &amp; usability</h4>
@@ -834,19 +813,6 @@
     </div>
 
     <div class="box">
-      <h3>Glucose Check (BGL)</h3>
-      <div class="trendrow">
-        <label>Glucose <input id="bglVal" type="number" class="numin" min="0" max="999" value="112"> mg/dL</label>
-        <label>Hand
-          <select id="bglHand" class="sel"><option value="male">Male</option><option value="female">Female</option></select>
-        </label>
-        <button class="startbtn" id="bglShow">🩸 Show Glucose Check</button>
-        <button class="cyclebtn" id="bglClose">✕ Close</button>
-      </div>
-      <div style="font-size:11px;color:var(--dim);margin-top:6px">Plays a fingerstick glucose check on the monitor that ends on the value you enter (over 600 shows HI, under 20 shows LO). The meter keeps floating on screen until you close it.</div>
-    </div>
-
-    <div class="box">
       <h3>Active Trends</h3>
       <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Tap the ⏱ next to any vital to trend it to a target over time. Several can run at once.</div>
       <div class="log" id="rampLog">No active trends.</div>
@@ -948,15 +914,6 @@
   <canvas id="cTwelve"></canvas>
 </div>
 
-<!-- ============ GLUCOSE CHECK OVERLAY ============ -->
-<div id="glu" class="glu">
-  <video id="gluVid" playsinline muted preload="auto"></video>
-  <div class="gscr" id="gluScreen"><div id="gluCount"></div><div id="gluVal"></div><div id="gluUnit">mg/dL</div></div>
-  <div class="gload" id="gluLoad">loading glucose check…</div>
-  <button class="gtap" id="gluTap">▶ Tap to play</button>
-  <button class="gclose" id="gluClose">✕ Close</button>
-</div>
-
 <!-- ============ CAMERA ============ -->
 <div id="camera">
   <video id="camLocal" autoplay playsinline muted></video>
@@ -987,8 +944,6 @@ const STATE = {
   pacerOn:false, pacerRate:70, pacerMa:0, captureMa:60,
   // 12-lead
   stemiSite:"none", ecg12Seq:0, twelveCloseSeq:0, blankSeq:0,
-  // glucose check (fingerstick animation on the monitor)
-  bgl:112, bglHand:"male", bglSeq:0, bglCloseSeq:0,
   // closed-loop physiology (instructor authority = control) — on by default
   autoPhys:true,
   // display options
@@ -1321,76 +1276,6 @@ class EcgEngine{
 /* =========================================================================
    MONITOR RENDERING
    ========================================================================= */
-/* =========================================================================
-   GLUCOSE CHECK — pre-rendered fingerstick animation (glucose/glucose_<hand>.mp4)
-   with the meter reading drawn live on the LCD, pinned to per-frame screen
-   corners exported from Blender (glucose/glucose_track.json).
-   ========================================================================= */
-const GLU=(()=>{
-  let track=null, trackP=null, raf=0, showing=false, value=112;
-  const $g=id=>document.getElementById(id);
-  const src=h=>"glucose/glucose_"+(h==="female"?"female":"male")+".mp4";
-  function loadTrack(){ if(!trackP) trackP=fetch("glucose/glucose_track.json").then(r=>r.json()).then(j=>(track=j)).catch(()=>null); return trackP; }
-  function preload(h){ const v=$g("gluVid"); if(!v) return; h=h==="female"?"female":"male";
-    if(v.dataset.hand!==h){ v.src=src(h); v.dataset.hand=h; try{v.load();}catch(e){} } loadTrack(); }
-  const reading=x=>{ x=Math.round(+x); if(!(x>=0)) return "--"; return x>600?"HI":(x<20?"LO":String(x)); };
-  // projective map of the W×H screen div onto the 4 tracked corners (TL,TR,BR,BL) → CSS matrix3d
-  function quadMatrix(W,H,q){
-    const [x0,y0,x1,y1,x2,y2,x3,y3]=q;
-    const dx1=x1-x2, dx2=x3-x2, dx3=x0-x1+x2-x3, dy1=y1-y2, dy2=y3-y2, dy3=y0-y1+y2-y3;
-    const den=dx1*dy2-dx2*dy1 || 1e-9;
-    const g=(dx3*dy2-dx2*dy3)/den, h=(dx1*dy3-dx3*dy1)/den;
-    const a=x1-x0+g*x1, b=x3-x0+h*x3, c=x0, d=y1-y0+g*y1, e=y3-y0+h*y3, f=y0;
-    return "matrix3d("+[a/W,d/W,0,g/W, b/H,e/H,0,h/H, 0,0,1,0, c,f,0,1].map(n=>+n.toFixed(6)).join(",")+")";
-  }
-  function draw(){ raf=requestAnimationFrame(draw); drawFrame(); }
-  function drawFrame(){
-    const v=$g("gluVid"); if(!showing||!track||!v) return;
-    const fps=track.fps||24;
-    // idle float loops: last frame == loopStart, so jump back (to the keyframe at loopStart)
-    if(v.currentTime >= (track.loopEnd-1.5)/fps){ try{ v.currentTime=track.loopStart/fps; }catch(e){} if(v.paused) v.play().catch(()=>{}); }
-    let fr=Math.min(track.frames,Math.max(1,Math.floor(v.currentTime*fps+0.001)+1));
-    const ov=$g("glu"), ow=ov.clientWidth, oh=ov.clientHeight, vw0=v.videoWidth||1280, vh0=v.videoHeight||720;
-    const sc=Math.min(ow/vw0,oh/vh0), vw=vw0*sc, vh=vh0*sc, ox=(ow-vw)/2, oy=(oh-vh)/2;
-    const c=track.corners[fr-1], q=[]; for(let i=0;i<8;i+=2) q.push(ox+c[i]*vw, oy+c[i+1]*vh);
-    const scr=$g("gluScreen"); scr.style.transform=quadMatrix(370,340,q);
-    const cd=$g("gluCount"), val=$g("gluVal"), un=$g("gluUnit");
-    if(fr<track.countdownStart){ cd.style.display=val.style.display=un.style.display="none"; }
-    else if(fr<track.readingFrame){ cd.textContent=String(5-Math.floor((fr-track.countdownStart)/track.countdownStep));
-      cd.style.display="block"; val.style.display=un.style.display="none"; }
-    else { val.textContent=reading(value); cd.style.display="none"; val.style.display=un.style.display="block"; }
-    $g("gluLoad").style.display=(v.readyState<2)?"block":"none";
-  }
-  async function show(x,hand){
-    value=x; preload(hand); const v=$g("gluVid"); $g("glu").classList.add("show"); showing=true;
-    $g("gluScreen").querySelectorAll("div").forEach(d=>d.style.display="none");
-    await loadTrack(); if(!showing) return;
-    v.muted=true; v.defaultMuted=true; v.playsInline=true; v.setAttribute("playsinline",""); v.setAttribute("webkit-playsinline","");
-    try{ v.currentTime=0; }catch(e){}
-    const tap=$g("gluTap"); tap.style.display="none";
-    v.play().catch(()=>{ tap.style.display="block"; });
-    if(!v._gluHooked){ v._gluHooked=true; ["timeupdate","seeked","playing","loadeddata"].forEach(ev=>v.addEventListener(ev,drawFrame)); }
-    cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); drawFrame();
-  }
-  function playTap(){ const v=$g("gluVid"); $g("gluTap").style.display="none"; v.play().catch(()=>{ $g("gluTap").style.display="block"; }); }
-  function hide(){ showing=false; cancelAnimationFrame(raf); const v=$g("gluVid"); if(v) v.pause(); $g("glu").classList.remove("show"); }
-  return {show,hide,preload,playTap,isShowing:()=>showing};
-})();
-// monitor side: react to control-room glucose events (ignores retained state on load, like the 12-lead)
-function gluWatch(){
-  let last=STATE.bglSeq||0, lastC=STATE.bglCloseSeq||0, primed=false;
-  setTimeout(()=>{ primed=true; last=STATE.bglSeq||0; lastC=STATE.bglCloseSeq||0; },2000);
-  GLU.preload(STATE.bglHand||"male");
-  document.getElementById("gluClose").onclick=()=>GLU.hide();
-  document.getElementById("gluTap").onclick=()=>GLU.playTap();
-  onState.push(()=>{
-    if(!GLU.isShowing()) GLU.preload(STATE.bglHand||"male");
-    if(!primed) return;
-    if((STATE.bglSeq||0)>last){ last=STATE.bglSeq; GLU.show(STATE.bgl,STATE.bglHand); track("glucose_view",STATE.bgl); }
-    if((STATE.bglCloseSeq||0)>lastC){ lastC=STATE.bglCloseSeq; GLU.hide(); }
-  });
-}
-
 function runMonitor(){
   document.getElementById("chooser").style.display="none";
   document.getElementById("monitor").style.display="flex";
@@ -1830,7 +1715,6 @@ function runMonitor(){
   }
 
   onState.push(updNums); updNums();
-  gluWatch();
 
   // top bar date + elapsed case timer
   const t0=Date.now();
@@ -1920,9 +1804,65 @@ function leadValue(lead,t){
   let hr=STATE.hr>0?STATE.hr:(c.hr||60); if(hr<=0)hr=60;
   const beatLen=60/hr, tau=t%beatLen; let v=0;
   const pSign=(lead==="aVR")?-1:(f>=0?1:-1);
-  if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);
-  const pr=c.pr||0.16, wide=c.wide?1.9:1;
+  const wide=c.wide?1.9:1;
   const st=leadST(lead);
+  // Complete heart block (3°): P waves march at their own atrial rate, fully dissociated from a
+  // slow, wide ventricular escape — so the 12-lead shows the same AV dissociation as the lead-II
+  // strip, instead of looking like a regular narrow bradycardia.
+  if(c.chb){
+    const pp=60/75, ppt=t%pp;                              // independent atrial rate (~75), matches the strip
+    v+=gauss(ppt,0.05,0.022,c.p*pSign);                    // dissociated P waves marching through
+    v+=gauss(tau,0.02,0.012*wide,-0.10*f);                 // wide ventricular escape QRS
+    v+=gauss(tau,0.05,0.016*wide,c.r*f);
+    v+=gauss(tau,0.10,0.018*wide,-0.30*f*0.5);
+    v+=gauss(tau,0.34,0.07,c.t*f*0.55);                    // T
+    return v;
+  }
+  // Bundle branch block: wide QRS with its characteristic shape (RBBB rSR′ "rabbit-ears",
+  // LBBB broad notched R) plus a discordant T — matching the lead-II strip, not a plain wide QRS.
+  if(c.rbbb || c.lbbb){
+    const prB=c.pr||0.16;
+    if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);
+    if(c.rbbb){                                   // rSR′: small r, S, tall terminal R′
+      v+=gauss(tau,prB+0.01,0.012,0.28*f);
+      v+=gauss(tau,prB+0.045,0.016,-0.35*f);
+      v+=gauss(tau,prB+0.09,0.024,0.95*f);
+    } else {                                      // LBBB: broad, notched monophasic R
+      v+=gauss(tau,prB+0.02,0.030,1.05*f);
+      v+=gauss(tau,prB+0.075,0.030,0.85*f);
+    }
+    v+=gauss(tau,prB+0.32,0.08,c.t*f);            // discordant T
+    return v;
+  }
+  // Ectopy (PVCs / PACs): mostly normal beats with a periodic ectopic — a wide bizarre PVC
+  // (no P, discordant T) or an early PAC — so the 12-lead shows the ectopics the strip does.
+  if(c.pvc || c.pac){
+    const prE=c.pr||0.16;
+    const grp = c.pac ? [1,1,0.6,1.4] : [1,1,1,1];  // PAC: premature beat (short coupling) then a compensatory pause; PVC keeps the interval
+    const glen=grp.reduce((a,b)=>a+b,0)*beatLen;
+    let tg=t%glen, start=0, idx=0, ltau=0;
+    for(idx=0; idx<grp.length; idx++){ const L=grp[idx]*beatLen; if(tg<start+L){ ltau=tg-start; break; } start+=L; }
+    const ect=(idx===3);
+    if(c.pvc && ect){                             // wide bizarre PVC, no preceding P, discordant T
+      v+=gauss(ltau,0.10,0.055,-1.5*f);
+      v+=gauss(ltau,0.17,0.05,0.6*f);
+      v+=gauss(ltau,0.34,0.08,0.5*f);
+      return v;
+    }
+    if(c.p) v+=gauss(ltau,0.05,0.022,c.p*pSign*(c.pac&&ect?0.8:1));   // PAC: early, slightly abnormal P
+    v+=gauss(ltau,prE-0.015,0.012,-0.10*f);
+    v+=gauss(ltau,prE+0.01,0.016,c.r*f);
+    v+=gauss(ltau,prE+0.05,0.018,-0.30*f*0.5);
+    v+=gauss(ltau,prE+0.30,0.06,c.t*f*0.6);
+    return v;
+  }
+  // Second-degree blocks: a P wave every cycle, but some P's don't conduct (dropped QRS),
+  // so the 12-lead no longer looks like plain sinus.
+  let pr=c.pr||0.16, dropped=false;
+  if(c.mobitz2){ if(Math.floor(t/beatLen)%3===2) dropped=true; }                        // constant PR, every 3rd beat dropped
+  else if(c.wenckebach){ const n=Math.floor(t/beatLen)%4; pr=(c.pr||0.16)+n*0.055; if(n===3) dropped=true; } // PR lengthens, then a dropped beat
+  if(c.p) v+=gauss(tau,0.05,0.022,c.p*pSign);                                            // P wave (atrial) — present every cycle
+  if(dropped) return v;                                                                   // non-conducted P: no QRS/T this beat
   v+=gauss(tau,pr-0.015,0.012*wide,-0.10*f);                          // q
   v+=gauss(tau,pr+0.01,0.016*wide,c.r*f);                             // R
   v+=gauss(tau,pr+0.05,0.018*wide, st>0 ? -0.05*Math.abs(f) : -0.30*f*0.5); // S (shallow when elevated)
@@ -2393,17 +2333,6 @@ function runControl(){
   document.getElementById("acq12").onclick=()=>{ STATE.ecg12Seq=(STATE.ecg12Seq||0)+1; push("12-lead acquired"); track("twelve_lead", STATE.stemiSite||"normal"); };
   document.getElementById("close12").onclick=()=>{ STATE.twelveCloseSeq=(STATE.twelveCloseSeq||0)+1; push("12-lead closed"); };
 
-  /* ---- glucose check ---- */
-  const bglIn=document.getElementById("bglVal"), bglHandSel=document.getElementById("bglHand");
-  bglIn.value=(STATE.bgl!=null?STATE.bgl:112); bglHandSel.value=STATE.bglHand||"male";
-  bglHandSel.onchange=e=>{ STATE.bglHand=e.target.value; push("Glucose hand "+STATE.bglHand); };
-  const bglGo=()=>{ const v=Math.max(0,Math.min(999,Math.round(+bglIn.value||0))); bglIn.value=v;
-    STATE.bgl=v; STATE.bglHand=bglHandSel.value; STATE.bglSeq=(STATE.bglSeq||0)+1;
-    push("Glucose check "+v+" mg/dL"); track("glucose_check",v); };
-  document.getElementById("bglShow").onclick=bglGo;
-  bglIn.addEventListener("keydown",e=>{ if(e.key==="Enter") bglGo(); });
-  document.getElementById("bglClose").onclick=()=>{ STATE.bglCloseSeq=(STATE.bglCloseSeq||0)+1; push("Glucose check closed"); };
-
   /* ---- reset for a new sim group ---- */
   document.getElementById("resetAll").onclick=()=>{
     clearTrends();
@@ -2488,7 +2417,7 @@ function runControl(){
   const dead=r=>["vfib","asystole"].includes(r), arrest=r=>["vfib","asystole","pea"].includes(r);
   const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
   let dbgLog=[], dbgT0=null, dbgEnd=null, dbgRunning=false, dbgTimer=null;
-  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,glu:STATE.bglSeq||0};   // monotonic counters
+  let seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};   // monotonic counters
   let seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};       // authoritative levels
   const dEvent=(label,cls)=>{ if(!dbgRunning)return; dbgLog.push({t:(performance.now()-dbgT0)/1000,label,cls:cls||""}); dbgStatusRender(); };
 
@@ -2517,7 +2446,6 @@ function runControl(){
     }
     if((STATE.nibpSeq||0)>seen.nib){ seen.nib=STATE.nibpSeq; dEvent("NIBP "+STATE.sys+"/"+STATE.dia+" (MAP "+Math.round((STATE.sys+2*STATE.dia)/3)+")"); }
     if((STATE.ecg12Seq||0)>seen.tw){ seen.tw=STATE.ecg12Seq; dEvent("12-lead acquired ["+(STATE.stemiSite||"—")+"]"); }
-    if((STATE.bglSeq||0)>(seen.glu||0)){ seen.glu=STATE.bglSeq; dEvent("Glucose check — "+STATE.bgl+" mg/dL"); }
     syncSliders();
   }
   onState.push(watchForLog);
@@ -2543,7 +2471,7 @@ function runControl(){
   }
   document.getElementById("btnScenStart").onclick=()=>{
     dbgLog=[]; dbgT0=performance.now(); dbgEnd=null; dbgRunning=true; lastSnap=performance.now();
-    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0,glu:STATE.bglSeq||0};
+    seen={shk:STATE.shockSeq||0,nib:STATE.nibpSeq||0,tw:STATE.ecg12Seq||0};
     seenL={rhythm:STATE.rhythm,pacerOn:STATE.pacerOn,cap:capturedNow()};
     dEvent("Scenario start — "+rl(STATE.rhythm)); vitalsSnapshot(); track("scenario_start", rl(STATE.rhythm));
     if(!dbgTimer) dbgTimer=setInterval(dbgTick,1000);
@@ -2569,8 +2497,6 @@ function runControl(){
     m+=metric("ROSC",rosc?"at "+fmt(rosc.t):"not achieved",!rosc);
     m+=metric("Pacing capture",cap?"at "+fmt(cap.t):"—");
     m+=metric("12-lead acquired",tw?"at "+fmt(tw.t):"—");
-    const glu=dbgLog.find(e=>/^Glucose check/.test(e.label));
-    m+=metric("Glucose check",glu?"at "+fmt(glu.t)+" ("+glu.label.replace(/^Glucose check — /,"")+")":"—");
     document.getElementById("dbMetrics").innerHTML=m;
     document.getElementById("dbSub").textContent = dbgT0==null
       ? "Press Start scenario first to record a run" : "Room "+ROOM+" · "+new Date().toLocaleString();
@@ -2698,7 +2624,6 @@ function runMobileMonitor(){
   }
   let nibpBusy=false;
   onState.push(updNums); updNums(); setInterval(updNums,400);
-  gluWatch();
 
   // NIBP cycle with a brief "measuring" beat
   function cycleBp(){ if(nibpBusy) return; nibpBusy=true; STATE.nibpSeq=(STATE.nibpSeq||0)+1; if(anyConnected()) broadcast();
@@ -2847,7 +2772,7 @@ function runDashboard(){
     const rooms=new Set(rows.map(r=>r.room).filter(Boolean));
     const cnt=ev=>rows.filter(r=>r.event===ev).length;
     sub.textContent=rows.length+" events · updated "+new Date().toLocaleString();
-    const cards=[["Opens",opens.length],["Sessions",sessions.size],["Rooms",rooms.size],["Scenarios",cnt("scenario_start")],["Shocks",cnt("shock")],["12-leads",cnt("twelve_lead")],["Glucose checks",cnt("glucose_check")]];
+    const cards=[["Opens",opens.length],["Sessions",sessions.size],["Rooms",rooms.size],["Scenarios",cnt("scenario_start")],["Shocks",cnt("shock")],["12-leads",cnt("twelve_lead")]];
     document.getElementById("dashCards").innerHTML=cards.map(c=>'<div class="dashcard"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join("");
     if(typeof Chart==="undefined") return;
     const byDay={}; opens.forEach(r=>{const k=(r.created_at||"").slice(0,10); if(k)byDay[k]=(byDay[k]||0)+1;});
