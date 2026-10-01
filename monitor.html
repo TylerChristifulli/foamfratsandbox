@@ -413,6 +413,8 @@
   #gluCount{top:48.5%;font-size:220px;} #gluVal{top:38%;font-size:170px;letter-spacing:4px;} #gluUnit{left:62%;top:79%;font-size:60px;}
   .glu .gclose{position:absolute;top:10px;right:12px;z-index:2;background:rgba(184,18,18,.85);border:none;color:#fff;
     border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;}
+  .glu .gtap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;display:none;background:#19e03a;color:#000;
+    border:none;border-radius:14px;padding:16px 28px;font-size:20px;font-weight:800;}
   .glu .gload{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#9aa;font-size:14px;display:none;}
 
   /* ---------- Debrief overlay ---------- */
@@ -523,15 +525,22 @@
     </div>
   </div>
   <p style="font-size:12px">Tip: bookmark <code>…?role=monitor&room=XXXXX</code> on the iPad to skip this screen.</p>
-  <button class="verchip" id="verChip">v1.4 · What's new</button>
+  <button class="verchip" id="verChip">v1.5 · What's new</button>
 </div>
 
 <!-- ============ RELEASE NOTES MODAL ============ -->
 <div id="relnotes" class="relmodal">
   <div class="relcard">
-    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.4 · Sep 2026</span><button class="x" id="relClose">✕ Close</button></div>
+    <div class="relhead"><h3>What's new</h3><span class="v" id="relVer">v1.5 · Sep 2026</span><button class="x" id="relClose">✕ Close</button></div>
     <div class="relbody">
       <p class="kick">A rolling summary of everything added and improved since launch.</p>
+
+      <h4>New in v1.5</h4>
+      <ul>
+        <li><b>Glucose check (BGL)</b>: a new Control Room box. Type a mg/dL value, pick a male or female hand, and hit <b>Show Glucose Check</b>. The monitor plays a fingerstick: the lancet presses on the side of the fingertip, a drop of blood forms, the meter wicks it up, counts down, and shows your number.</li>
+        <li><b>Real meter behavior</b>: readings over 600 show <b>HI</b> and under 20 show <b>LO</b>. The meter stays floating on screen until you close it from the Control Room or the monitor.</li>
+        <li><b>Logged in the debrief</b>: every glucose check is time-stamped with its value in the competency log.</li>
+      </ul>
 
       <h4>New in v1.4</h4>
       <ul>
@@ -944,6 +953,7 @@
   <video id="gluVid" playsinline muted preload="auto"></video>
   <div class="gscr" id="gluScreen"><div id="gluCount"></div><div id="gluVal"></div><div id="gluUnit">mg/dL</div></div>
   <div class="gload" id="gluLoad">loading glucose check…</div>
+  <button class="gtap" id="gluTap">▶ Tap to play</button>
   <button class="gclose" id="gluClose">✕ Close</button>
 </div>
 
@@ -1333,8 +1343,8 @@ const GLU=(()=>{
     const a=x1-x0+g*x1, b=x3-x0+h*x3, c=x0, d=y1-y0+g*y1, e=y3-y0+h*y3, f=y0;
     return "matrix3d("+[a/W,d/W,0,g/W, b/H,e/H,0,h/H, 0,0,1,0, c,f,0,1].map(n=>+n.toFixed(6)).join(",")+")";
   }
-  function draw(){
-    raf=requestAnimationFrame(draw);
+  function draw(){ raf=requestAnimationFrame(draw); drawFrame(); }
+  function drawFrame(){
     const v=$g("gluVid"); if(!showing||!track||!v) return;
     const fps=track.fps||24;
     // idle float loops: last frame == loopStart, so jump back (to the keyframe at loopStart)
@@ -1355,11 +1365,16 @@ const GLU=(()=>{
     value=x; preload(hand); const v=$g("gluVid"); $g("glu").classList.add("show"); showing=true;
     $g("gluScreen").querySelectorAll("div").forEach(d=>d.style.display="none");
     await loadTrack(); if(!showing) return;
-    try{ v.currentTime=0; }catch(e){} v.play().catch(()=>{});
-    cancelAnimationFrame(raf); raf=requestAnimationFrame(draw);
+    v.muted=true; v.defaultMuted=true; v.playsInline=true; v.setAttribute("playsinline",""); v.setAttribute("webkit-playsinline","");
+    try{ v.currentTime=0; }catch(e){}
+    const tap=$g("gluTap"); tap.style.display="none";
+    v.play().catch(()=>{ tap.style.display="block"; });
+    if(!v._gluHooked){ v._gluHooked=true; ["timeupdate","seeked","playing","loadeddata"].forEach(ev=>v.addEventListener(ev,drawFrame)); }
+    cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); drawFrame();
   }
+  function playTap(){ const v=$g("gluVid"); $g("gluTap").style.display="none"; v.play().catch(()=>{ $g("gluTap").style.display="block"; }); }
   function hide(){ showing=false; cancelAnimationFrame(raf); const v=$g("gluVid"); if(v) v.pause(); $g("glu").classList.remove("show"); }
-  return {show,hide,preload,isShowing:()=>showing};
+  return {show,hide,preload,playTap,isShowing:()=>showing};
 })();
 // monitor side: react to control-room glucose events (ignores retained state on load, like the 12-lead)
 function gluWatch(){
@@ -1367,6 +1382,7 @@ function gluWatch(){
   setTimeout(()=>{ primed=true; last=STATE.bglSeq||0; lastC=STATE.bglCloseSeq||0; },2000);
   GLU.preload(STATE.bglHand||"male");
   document.getElementById("gluClose").onclick=()=>GLU.hide();
+  document.getElementById("gluTap").onclick=()=>GLU.playTap();
   onState.push(()=>{
     if(!GLU.isShowing()) GLU.preload(STATE.bglHand||"male");
     if(!primed) return;
