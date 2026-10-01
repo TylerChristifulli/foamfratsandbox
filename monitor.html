@@ -592,7 +592,7 @@
       <h4>Physiology &amp; debrief</h4>
       <ul>
         <li><b>Auto-physiology</b> — the patient deteriorates in arrest and recovers after a successful shock or pacing capture (EtCO₂ rises with ROSC).</li>
-        <li><b>Competency debrief log</b> — timestamped record of shocks, pacing, NIBP, 12-leads, ROSC and vitals, with a metrics screen and copy-log.</li>
+        <li><b>Competency debrief log</b> — timestamped record of shocks, pacing, NIBP, 12-leads, glucose checks, ROSC and vitals, with a metrics screen and copy-log.</li>
       </ul>
 
       <h4>Control room &amp; usability</h4>
@@ -2569,6 +2569,8 @@ function runControl(){
     m+=metric("ROSC",rosc?"at "+fmt(rosc.t):"not achieved",!rosc);
     m+=metric("Pacing capture",cap?"at "+fmt(cap.t):"—");
     m+=metric("12-lead acquired",tw?"at "+fmt(tw.t):"—");
+    const glu=dbgLog.find(e=>/^Glucose check/.test(e.label));
+    m+=metric("Glucose check",glu?"at "+fmt(glu.t)+" ("+glu.label.replace(/^Glucose check — /,"")+")":"—");
     document.getElementById("dbMetrics").innerHTML=m;
     document.getElementById("dbSub").textContent = dbgT0==null
       ? "Press Start scenario first to record a run" : "Room "+ROOM+" · "+new Date().toLocaleString();
@@ -2845,7 +2847,7 @@ function runDashboard(){
     const rooms=new Set(rows.map(r=>r.room).filter(Boolean));
     const cnt=ev=>rows.filter(r=>r.event===ev).length;
     sub.textContent=rows.length+" events · updated "+new Date().toLocaleString();
-    const cards=[["Opens",opens.length],["Sessions",sessions.size],["Rooms",rooms.size],["Scenarios",cnt("scenario_start")],["Shocks",cnt("shock")],["12-leads",cnt("twelve_lead")]];
+    const cards=[["Opens",opens.length],["Sessions",sessions.size],["Rooms",rooms.size],["Scenarios",cnt("scenario_start")],["Shocks",cnt("shock")],["12-leads",cnt("twelve_lead")],["Glucose checks",cnt("glucose_check")]];
     document.getElementById("dashCards").innerHTML=cards.map(c=>'<div class="dashcard"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join("");
     if(typeof Chart==="undefined") return;
     const byDay={}; opens.forEach(r=>{const k=(r.created_at||"").slice(0,10); if(k)byDay[k]=(byDay[k]||0)+1;});
